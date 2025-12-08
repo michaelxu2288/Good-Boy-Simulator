@@ -1,8 +1,4 @@
 import * as THREE from 'three';
-
-export function createWorld(scene) {
-    const wallColliders = [];
-
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 
 export function createWorld(scene) {
@@ -16,15 +12,18 @@ export function createWorld(scene) {
     const sun = new THREE.Vector3();
 
     const effectController = {
-        turbidity: 10,
-        rayleigh: 3,
+        turbidity: 5,
+        rayleigh: 2,
         mieCoefficient: 0.005,
         mieDirectionalG: 0.7,
-        elevation: 2,
+        elevation: 15,
         azimuth: 180,
     };
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
     dirLight.position.set(100, 150, 50);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 4096;
@@ -59,6 +58,31 @@ export function createWorld(scene) {
 
 
     // --- 2. TERRAIN ---
+    function createGrassTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const context = canvas.getContext('2d');
+        
+        context.fillStyle = 'rgb(40, 80, 40)';
+        context.fillRect(0, 0, 512, 512);
+        
+        for (let i = 0; i < 20000; i++) {
+            const x = Math.random() * 512;
+            const y = Math.random() * 512;
+            const length = Math.random() * 10 + 5;
+            const angle = Math.random() * Math.PI * 2;
+            context.beginPath();
+            context.moveTo(x, y);
+            context.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length);
+            const brightness = Math.random() * 0.2 + 0.8;
+            context.strokeStyle = `rgba(60, 120, 60, ${brightness})`;
+            context.stroke();
+        }
+        
+        return new THREE.CanvasTexture(canvas);
+    }
+
     const groundGeo = new THREE.PlaneGeometry(500, 500, 32, 32);
     
     // Slight uneven terrain
@@ -72,15 +96,21 @@ export function createWorld(scene) {
     }
     groundGeo.computeVertexNormals();
 
+    const grassTexture = createGrassTexture();
+    grassTexture.wrapS = THREE.RepeatWrapping;
+    grassTexture.wrapT = THREE.RepeatWrapping;
+    grassTexture.repeat.set(100, 100);
+
     const groundMat = new THREE.MeshStandardMaterial({ 
-        color: 0x5c8f38, 
+        map: grassTexture, 
         roughness: 0.8,
-        flatShading: true
+        flatShading: false
     });
     const floor = new THREE.Mesh(groundGeo, groundMat);
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     scene.add(floor);
+
 
     // --- 3. MASSIVE GRASS SYSTEM (InstancedMesh for Performance) ---
     const grassCount = 8000;
