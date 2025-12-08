@@ -147,29 +147,65 @@ export function createWorld(scene) {
 
     function createRoadSegment(w, h, x, z) {
         // Asphalt
-        const r = new THREE.Mesh(new THREE.PlaneGeometry(w, h), roadMat);
+        const roadGeo = new THREE.PlaneGeometry(w, h, 50, 10);
+        const r = new THREE.Mesh(roadGeo, roadMat);
+        
+        const pos = r.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+            const worldX = pos.getX(i) + x;
+            const worldZ = pos.getY(i) + z; // Plane's y corresponds to world z
+            pos.setZ(i, getTerrainHeightAt(worldX, worldZ) + 0.3); // Set plane's z (world y)
+        }
+        r.geometry.computeVertexNormals();
+
         r.rotation.x = -Math.PI/2;
-        r.position.set(x, 0.2, z);
+        r.position.set(x, 0, z); // Position is handled by vertex manipulation, but set group position
         r.receiveShadow = true;
         roadGroup.add(r);
 
         // Sidewalk curbs
+        const curbHeight = 0.2;
+        const curbWidth = 1;
+        const curbSegmentLength = 5;
+
         if (w > h) { // Horizontal road
-            const curb1 = new THREE.Mesh(new THREE.BoxGeometry(w, 0.2, 1), sidewalkMat);
-            curb1.position.set(x, 0.1, z - h/2 - 0.5);
-            curb1.castShadow = true;
-            curb1.receiveShadow = true;
-            const curb2 = curb1.clone();
-            curb2.position.set(x, 0.1, z + h/2 + 0.5);
-            roadGroup.add(curb1, curb2);
+            const numSegments = Math.floor(w / curbSegmentLength);
+            for(let i = 0; i < numSegments; i++) {
+                const segX = x - w/2 + (i + 0.5) * curbSegmentLength;
+                
+                // Top curb
+                const z1 = z - h/2 - curbWidth/2;
+                const y1 = getTerrainHeightAt(segX, z1) + curbHeight/2;
+                const curb1 = new THREE.Mesh(new THREE.BoxGeometry(curbSegmentLength, curbHeight, curbWidth), sidewalkMat);
+                curb1.position.set(segX, y1, z1);
+                roadGroup.add(curb1);
+
+                // Bottom curb
+                const z2 = z + h/2 + curbWidth/2;
+                const y2 = getTerrainHeightAt(segX, z2) + curbHeight/2;
+                const curb2 = new THREE.Mesh(new THREE.BoxGeometry(curbSegmentLength, curbHeight, curbWidth), sidewalkMat);
+                curb2.position.set(segX, y2, z2);
+                roadGroup.add(curb2);
+            }
         } else { // Vertical road
-            const curb1 = new THREE.Mesh(new THREE.BoxGeometry(1, 0.2, h), sidewalkMat);
-            curb1.position.set(x - w/2 - 0.5, 0.1, z);
-            curb1.castShadow = true;
-            curb1.receiveShadow = true;
-            const curb2 = curb1.clone();
-            curb2.position.set(x + w/2 + 0.5, 0.1, z);
-            roadGroup.add(curb1, curb2);
+            const numSegments = Math.floor(h / curbSegmentLength);
+             for(let i = 0; i < numSegments; i++) {
+                const segZ = z - h/2 + (i + 0.5) * curbSegmentLength;
+
+                // Left curb
+                const x1 = x - w/2 - curbWidth/2;
+                const y1 = getTerrainHeightAt(x1, segZ) + curbHeight/2;
+                const curb1 = new THREE.Mesh(new THREE.BoxGeometry(curbWidth, curbHeight, curbSegmentLength), sidewalkMat);
+                curb1.position.set(x1, y1, segZ);
+                roadGroup.add(curb1);
+
+                // Right curb
+                const x2 = x + w/2 + curbWidth/2;
+                const y2 = getTerrainHeightAt(x2, segZ) + curbHeight/2;
+                const curb2 = new THREE.Mesh(new THREE.BoxGeometry(curbWidth, curbHeight, curbSegmentLength), sidewalkMat);
+                curb2.position.set(x2, y2, segZ);
+                roadGroup.add(curb2);
+            }
         }
     }
 

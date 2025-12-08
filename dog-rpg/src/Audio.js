@@ -72,7 +72,7 @@ export const AudioSys = {
     },
 
     // 2. Helper to play a loaded sound
-    playSound: function(name, pitch = 1.0, vol = 1.0) {
+    playSound: function(name, pitch = 1.0, vol = 1.0, duration = 3) {
         // If context isn't ready or sound isn't loaded yet, do nothing
         if (!this.ctx || !this.buffers[name]) {
             console.warn(`Sound not found: ${name}`);
@@ -96,7 +96,7 @@ export const AudioSys = {
         source.connect(gain);
         gain.connect(this.ctx.destination);
         
-        source.start(0, 0, 3);
+        source.start(0, 0, duration);
     },
 
     // 3. Updated specialized functions
