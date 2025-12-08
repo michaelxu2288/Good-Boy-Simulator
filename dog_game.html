@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Neighborhood Dog RPG</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #111; font-family: 'Courier New', Courier, monospace; }
+        
+        #ui {
+            position: absolute;
+            top: 10px; left: 10px;
+            color: white;
+            text-shadow: 2px 2px 0 #000;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        /* Bars */
+        .bar-container {
+            width: 250px; height: 25px;
+            background: rgba(0,0,0,0.6);
+            border: 2px solid white;
+            margin-bottom: 5px;
+            position: relative;
+        }
+        .bar-fill { height: 100%; transition: width 0.2s; }
+        #hp-bar { background: #ff3333; width: 100%; }
+        #xp-bar { background: #33ff33; width: 0%; }
+        
+        #dialogue-box {
+            position: absolute;
+            bottom: 80px; left: 50%;
+            transform: translateX(-50%);
+            width: 60%;
+            background: rgba(0,0,0,0.8);
+            border: 2px solid white;
+            color: #fff;
+            padding: 20px;
+            font-size: 18px;
+            display: none;
+            text-align: center;
+            border-radius: 10px;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 10px; left: 10px;
+            color: #aaa;
+            font-size: 14px;
+        }
+        
+        #start-screen {
+            position: absolute; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.85);
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            color: white; z-index: 20;
+        }
+        button { padding: 20px 40px; font-size: 24px; cursor: pointer; background: #FFD700; border: none; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="start-screen">
+    <h1>🐕 Neighborhood Dog RPG</h1>
+    <p>Explore, Beg, and Conquer.</p>
+    <button id="btn-start">WAKE UP</button>
+</div>
+
+<div id="ui">
+    <div class="bar-container">HP <div id="hp-bar" class="bar-fill"></div></div>
+    <div class="bar-container">SIZE <div id="xp-bar" class="bar-fill"></div></div>
+    <h2 id="level-display">Lvl 1 Stray</h2>
+</div>
+
+<div id="dialogue-box"></div>
+
+<div id="controls">
+    WASD: Move | SHIFT: Run | SPACE: Beg/Interact | CLICK: Bite | F: Sniff
+</div>
+
+<script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.159.0/build/three.module.js';
+
+    // --- CONFIG ---
+    const CONFIG = {
+        mapCanvas: 200, // Size of world
+        houseCount: 40,
+        humanCount: 15,
+        dogCount: 10
+    };
+
+    // --- AUDIO ENGINE (Procedural) ---
+    const AudioSys = {
+        ctx: null,
+        init: function() {
+            window.AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+        },
+        playTone: function(freq, type, dur, vol=0.1) {
+            if(!this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + dur);
+        },
+        bark: function(pitch=1.0) {
+            if(!this.ctx) return;
+            const t = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(400 * pitch, t);
+            osc.frequency.exponentialRampToValueAtTime(100 * pitch, t + 0.15);
+            gain.gain.setValueAtTime(0.3, t);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.2);
+        },
+        sniff: function() {
+            if(!this.ctx) return;
+            const t = this.ctx.currentTime;
+            const bufferSize = this.ctx.sampleRate * 0.1; // 0.1 sec
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(0.2, t);
+            gain.gain.linearRampToValueAtTime(0, t + 0.1);
+            noise.connect(gain);
+            gain.connect(this.ctx.destination);
+            noise.start();
+        },
+        hit: function() { this.playTone(150, 'square', 0.1, 0.2); },
+        powerup: function() { this.playTone(600, 'sine', 0.3, 0.2); }
+    };
+
+    // --- SETUP THREE.JS ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB);
+    scene.fog = new THREE.Fog(0x87CEEB, 20, 90);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 200);
+    const renderer = new THREE.WebGLRenderer({antialias: true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    // Lights
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+    scene.add(hemiLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(50, 100, 50);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(2048, 2048);
+    dirLight.shadow.camera.left = -100;
+    dirLight.shadow.camera.right = 100;
+    dirLight.shadow.camera.top = 100;
+    dirLight.shadow.camera.bottom = -100;
+    scene.add(dirLight);
+
+    // --- ASSETS & HELPERS ---
+    const wallColliders = [];
+    
+    function randomColor() { return Math.floor(Math.random()*16777215); }
+    function randRange(min, max) { return Math.random() * (max - min) + min; }
+
+    // Dialogue Generator
+    const dialogueParts = {
+        intro: ["Greetings, little one.", "Oh my, a dog!", "Hey buddy!", "Don't bite me!", "Are you lost?", "Who's a good boy?"],
+        story: [
+            "I used to be a chef in Paris.", 
+            "My cat is so jealous of you.", 
+            "I'm late for my yoga class.", 
+            "I buried a treasure in the park once.", 
+            "Have you seen my keys?",
+            "I think aliens are real.",
+            "My grandchildren never visit.",
+            "I love the smell of rain.",
+            "I'm writing a novel about a squirrel."
+        ],
+        treat: ["Here, have a snack.", "Take this biscuit.", "Don't tell anyone I gave you this.", "Catch!"]
+    };
+
+    function generateDialogue() {
+        const i = dialogueParts.intro[Math.floor(Math.random()*dialogueParts.intro.length)];
+        const s = dialogueParts.story[Math.floor(Math.random()*dialogueParts.story.length)];
+        return `${i} ${s}`;
+    }
+
+    // --- WORLD GENERATION ---
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ color: 0x4a6b3e }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // Roads
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+    function createRoad(w, h, x, z) {
+        const r = new THREE.Mesh(new THREE.PlaneGeometry(w, h), roadMat);
+        r.rotation.x = -Math.PI/2;
+        r.position.set(x, 0.02, z);
+        r.receiveShadow = true;
+        scene.add(r);
+    }
+    // Simple Grid of roads
+    createRoad(400, 20, 0, 0); // Main X
+    createRoad(20, 400, 0, 0); // Main Z
+    createRoad(400, 10, 0, 80);
+    createRoad(400, 10, 0, -80);
+    createRoad(10, 400, 80, 0);
+    createRoad(10, 400, -80, 0);
+
+    // Houses
+    const houseGeo = new THREE.BoxGeometry(1,1,1);
+    const roofGeo = new THREE.ConeGeometry(0.7, 0.5, 4);
+    
+    for(let i=0; i<CONFIG.houseCount; i++) {
+        const w = randRange(8, 15);
+        const h = randRange(6, 12);
+        const d = randRange(8, 15);
+        const x = randRange(-180, 180);
+        const z = randRange(-180, 180);
+        
+        // Don't spawn on roads (roughly)
+        if(Math.abs(x) < 15 || Math.abs(z) < 15 || Math.abs(x-80)<10 || Math.abs(z-80)<10) continue;
+
+        const houseGroup = new THREE.Group();
+        const mat = new THREE.MeshStandardMaterial({ color: randomColor() });
+        const base = new THREE.Mesh(houseGeo, mat);
+        base.scale.set(w, h, d);
+        base.position.y = h/2;
+        base.castShadow = true;
+        base.receiveShadow = true;
+        
+        const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ color: 0x222222 }));
+        roof.scale.set(w, h, d);
+        roof.position.y = h + h/4;
+        roof.rotation.y = Math.PI/4;
+        
+        houseGroup.add(base);
+        houseGroup.add(roof);
+        houseGroup.position.set(x, 0, z);
+        scene.add(houseGroup);
+        
+        // Collision Box
+        const box = new THREE.Box3().setFromObject(base);
+        wallColliders.push(box);
+    }
+
+    // --- ENTITY SYSTEM ---
+    const entities = [];
+    const treats = [];
+    
+    class Entity {
+        constructor(mesh, x, z) {
+            this.mesh = mesh;
+            this.mesh.position.set(x, 0, z);
+            scene.add(this.mesh);
+            this.velocity = new THREE.Vector3();
+            this.hp = 100;
+            this.maxHp = 100;
+            this.dead = false;
+        }
+        update(dt) {}
+    }
+
+    // --- PLAYER ---
+    class Player extends Entity {
+        constructor() {
+            const group = new THREE.Group();
+            const mat = new THREE.MeshStandardMaterial({color: 0x8B4513});
+            
+            // Simplified voxel dog
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 2), mat);
+            body.position.y = 1; body.castShadow=true;
+            group.add(body);
+            
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), mat);
+            head.position.set(0, 1.8, 1.2); head.castShadow=true;
+            group.add(head);
+
+            const tail = new THREE.Mesh(new THREE.BoxGeometry(0.2,0.2,1), mat);
+            tail.position.set(0, 1.2, -1.2);
+            group.add(tail);
+
+            super(group, 0, 5);
+            this.tail = tail;
+            this.size = 1.0;
+            this.xp = 0;
+            this.stamina = 100;
+        }
+
+        grow(amount) {
+            this.size += amount;
+            this.maxHp += 20;
+            this.hp = this.maxHp;
+            this.xp += amount * 100;
+            // Smooth scale
+            this.mesh.scale.setScalar(this.size);
+            document.getElementById('xp-bar').style.width = Math.min(100, (this.xp % 1000)/10) + '%';
+            document.getElementById('level-display').innerText = `Lvl ${Math.floor(this.xp/100)+1} Beast`;
+            AudioSys.powerup();
+        }
+
+        takeDamage(amt) {
+            this.hp -= amt;
+            AudioSys.hit();
+            if(this.hp <= 0) {
+                this.hp = 0;
+                // Respawn logic or Game Over could go here. For now, just reset pos.
+                this.mesh.position.set(0,0,0);
+                this.hp = this.maxHp;
+                alert("You were knocked out! Waking up at home...");
+            }
+            document.getElementById('hp-bar').style.width = (this.hp / this.maxHp * 100) + '%';
+        }
+    }
+
+    const player = new Player();
+
+    // --- NPC HUMAN ---
+    class Human extends Entity {
+        constructor() {
+            const group = new THREE.Group();
+            const shirtColor = randomColor();
+            const pantColor = randomColor();
+            
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.5, 0.5), new THREE.MeshStandardMaterial({color: shirtColor}));
+            body.position.y = 2.2; body.castShadow=true;
+            const legs = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.5, 0.5), new THREE.MeshStandardMaterial({color: pantColor}));
+            legs.position.y = 0.75; legs.castShadow=true;
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), new THREE.MeshStandardMaterial({color: 0xffccaa}));
+            head.position.y = 3.2; head.castShadow=true;
+            
+            group.add(body); group.add(legs); group.add(head);
+            
+            const x = randRange(-150, 150);
+            const z = randRange(-150, 150);
+            super(group, x, z);
+            
+            this.target = new THREE.Vector3(x,0,z);
+            this.timer = 0;
+            this.state = 'IDLE';
+            this.dialogue = generateDialogue();
+            this.hasGivenTreat = false;
+        }
+
+        update(dt) {
+            // AI Logic
+            if(this.state === 'IDLE') {
+                this.timer += dt;
+                if(this.timer > 3) {
+                    this.state = 'WALKING';
+                    this.target.set(randRange(-150,150), 0, randRange(-150,150));
+                    this.timer = 0;
+                }
+            } else if (this.state === 'WALKING') {
+                const dir = new THREE.Vector3().subVectors(this.target, this.mesh.position);
+                if(dir.length() < 1) {
+                    this.state = 'IDLE';
+                } else {
+                    dir.normalize();
+                    this.mesh.lookAt(this.target.x, 0, this.target.z);
+                    this.mesh.position.add(dir.multiplyScalar(3 * dt));
+                }
+            }
+        }
+    }
+
+    // --- NPC DOG (ENEMY) ---
+    class DogNPC extends Entity {
+        constructor() {
+            const group = new THREE.Group();
+            const color = randomColor();
+            const scale = randRange(0.8, 1.5);
+            
+            const mat = new THREE.MeshStandardMaterial({color: color});
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 2), mat);
+            body.position.y = 1; body.castShadow=true;
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), mat);
+            head.position.set(0, 1.8, 1.2); head.castShadow=true;
+            
+            group.add(body); group.add(head);
+            group.scale.setScalar(scale);
+            
+            const x = randRange(-150, 150);
+            const z = randRange(-150, 150);
+            super(group, x, z);
+            
+            this.scaleVal = scale;
+            this.hp = 30 * scale;
+            this.damage = 5 * scale;
+            this.state = 'WANDER';
+            this.target = new THREE.Vector3(x,0,z);
+            this.timer = 0;
+            this.isHostile = false;
+            this.attackTimer = 0;
+        }
+
+        update(dt) {
+            if(this.dead) return;
+            
+            const distToPlayer = this.mesh.position.distanceTo(player.mesh.position);
+
+            if(this.isHostile) {
+                // Combat Logic
+                if(distToPlayer > 2 && distToPlayer < 30) {
+                    // Chase
+                    const dir = new THREE.Vector3().subVectors(player.mesh.position, this.mesh.position).normalize();
+                    this.mesh.lookAt(player.mesh.position.x, 0, player.mesh.position.z);
+                    this.mesh.position.add(dir.multiplyScalar(6 * dt));
+                } else if (distToPlayer <= 2) {
+                    // Attack
+                    this.attackTimer += dt;
+                    if(this.attackTimer > 1.0) {
+                        player.takeDamage(this.damage);
+                        AudioSys.bark(0.5); // Low pitch bark
+                        // Lunge anim
+                        this.mesh.position.add(this.mesh.getWorldDirection(new THREE.Vector3()).multiplyScalar(0.5));
+                        this.attackTimer = 0;
+                    }
+                } else {
+                    this.isHostile = false; // Player ran away
+                }
+            } else {
+                // Wander Logic
+                if(this.state === 'WANDER') {
+                    const dir = new THREE.Vector3().subVectors(this.target, this.mesh.position);
+                    if(dir.length() < 1) {
+                        this.target.set(randRange(-150,150), 0, randRange(-150,150));
+                    } else {
+                        dir.normalize();
+                        this.mesh.lookAt(this.target.x, 0, this.target.z);
+                        this.mesh.position.add(dir.multiplyScalar(4 * dt));
+                    }
+                }
+            }
+        }
+
+        takeHit(dmg) {
+            this.hp -= dmg;
+            this.isHostile = true;
+            // Visual recoil
+            this.mesh.position.add(this.mesh.getWorldDirection(new THREE.Vector3()).multiplyScalar(-2));
+            
+            if(this.hp <= 0) {
+                this.die();
+            }
+        }
+
+        die() {
+            this.dead = true;
+            scene.remove(this.mesh);
+            // Drop Essence
+            const orb = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshBasicMaterial({color: 0x00ff00}));
+            orb.position.copy(this.mesh.position);
+            orb.position.y = 1;
+            orb.userData = { type: 'essence', value: this.scaleVal * 0.2 };
+            scene.add(orb);
+            treats.push(orb);
+        }
+    }
+
+    // --- POPULATE WORLD ---
+    for(let i=0; i<CONFIG.humanCount; i++) entities.push(new Human());
+    for(let i=0; i<CONFIG.dogCount; i++) entities.push(new DogNPC());
+
+    // --- CONTROLS ---
+    const keys = { w:false, a:false, s:false, d:false, shift:false };
+    window.addEventListener('keydown', e => {
+        if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true;
+        if(e.code === 'KeyF') AudioSys.sniff();
+        if(e.code === 'Space') interact();
+    });
+    window.addEventListener('keyup', e => {
+        if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false;
+    });
+    window.addEventListener('mousedown', () => attack());
+
+    function interact() {
+        // Find closest human
+        let closest = null;
+        let dist = 10;
+        
+        entities.forEach(e => {
+            if(e instanceof Human) {
+                const d = player.mesh.position.distanceTo(e.mesh.position);
+                if(d < dist) { dist = d; closest = e; }
+            }
+        });
+
+        const box = document.getElementById('dialogue-box');
+        if(closest && dist < 6) {
+            AudioSys.bark(1.2); // High pitch beg
+            player.mesh.rotation.x = -0.5; // Tilt up
+            setTimeout(() => player.mesh.rotation.x = 0, 500);
+
+            box.style.display = 'block';
+            box.innerText = `${closest.dialogue}`;
+            
+            if(!closest.hasGivenTreat) {
+                closest.hasGivenTreat = true;
+                setTimeout(() => {
+                    const t = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshStandardMaterial({color: 0xFFD700}));
+                    t.position.copy(closest.mesh.position).add(new THREE.Vector3(0,2,0));
+                    t.userData = { type: 'treat', value: 0.05 };
+                    scene.add(t);
+                    treats.push(t);
+                    box.innerText += "\n(They dropped a treat!)";
+                }, 1000);
+            }
+            setTimeout(() => box.style.display = 'none', 3000);
+        } else {
+            AudioSys.bark(1.0);
+        }
+    }
+
+    function attack() {
+        // Lunge forward
+        player.mesh.position.add(player.mesh.getWorldDirection(new THREE.Vector3()).multiplyScalar(1));
+        AudioSys.bark(0.8); // Aggressive bark
+        
+        // Check hits
+        entities.forEach(e => {
+            if(e instanceof DogNPC && !e.dead) {
+                if(player.mesh.position.distanceTo(e.mesh.position) < 4 * player.size) {
+                    e.takeHit(10 * player.size);
+                    AudioSys.hit();
+                }
+            }
+        });
+    }
+
+    // --- GAME LOOP ---
+    const clock = new THREE.Clock();
+    
+    document.getElementById('btn-start').addEventListener('click', () => {
+        document.getElementById('start-screen').style.display = 'none';
+        AudioSys.init();
+        animate();
+    });
+
+    function animate() {
+        requestAnimationFrame(animate);
+        const dt = Math.min(clock.getDelta(), 0.1);
+
+        // Player Move
+        let speed = keys.shift ? 15 : 8;
+        if(keys.shift) player.stamina -= 10*dt;
+        if(player.stamina <= 0) speed = 8;
+        
+        const rotSpeed = 3;
+        if(keys.a) player.mesh.rotation.y += rotSpeed * dt;
+        if(keys.d) player.mesh.rotation.y -= rotSpeed * dt;
+        
+        if(keys.w || keys.s) {
+            const dir = new THREE.Vector3(0,0,1).applyAxisAngle(new THREE.Vector3(0,1,0), player.mesh.rotation.y);
+            if(keys.s) dir.negate();
+            
+            const nextPos = player.mesh.position.clone().add(dir.multiplyScalar(speed * dt));
+            
+            // Wall Collision Check
+            let collide = false;
+            const pBox = new THREE.Box3().setFromCenterAndSize(nextPos, new THREE.Vector3(1,2,1));
+            for(let w of wallColliders) {
+                if(pBox.intersectsBox(w)) { collide = true; break; }
+            }
+            
+            if(!collide) {
+                player.mesh.position.copy(nextPos);
+                // Tail wag
+                player.tail.rotation.y = Math.sin(Date.now()*0.01)*0.5;
+            }
+        }
+
+        // Camera Follow
+        const offset = new THREE.Vector3(0, 6 * player.size, -10 * player.size).applyMatrix4(player.mesh.matrixWorld);
+        camera.position.lerp(offset, 0.1);
+        camera.lookAt(player.mesh.position.clone().add(new THREE.Vector3(0,2,0)));
+
+        // Updates
+        entities.forEach(e => e.update(dt));
+
+        // Treats / Essence
+        for(let i=treats.length-1; i>=0; i--) {
+            const t = treats[i];
+            t.position.y = Math.max(0.5, t.position.y - 5*dt); // Gravity
+            t.rotation.y += dt;
+            
+            if(player.mesh.position.distanceTo(t.position) < 2 * player.size) {
+                player.grow(t.userData.value);
+                scene.remove(t);
+                treats.splice(i, 1);
+            }
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    // Resize
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth/window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+</script>
+</body>
+</html>
