@@ -6,14 +6,15 @@ import { AudioSys } from './Audio'; // Notice this is ./Audio, not ../Audio
 
 // --- SETUP ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87CEEB);
-scene.fog = new THREE.Fog(0x87CEEB, 20, 90);
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 200);
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.5;
 document.body.appendChild(renderer.domElement);
 
 // --- LOAD WORLD ---
@@ -60,7 +61,7 @@ function interact() {
 
     const box = document.getElementById('dialogue-box');
     if(closest && dist < 6) {
-        AudioSys.bark(1.2); 
+        AudioSys.whine(); 
         player.group.rotation.x = -0.5; // Tilt up
         setTimeout(() => player.group.rotation.x = 0, 500);
 
@@ -80,19 +81,18 @@ function interact() {
         }
         setTimeout(() => box.style.display = 'none', 3000);
     } else {
-        AudioSys.bark(1.0);
+        AudioSys.whine();
     }
 }
 
 function attack() {
     player.group.position.add(player.group.getWorldDirection(new THREE.Vector3()).multiplyScalar(1)); // Lunge
-    AudioSys.bark(0.8);
     
     entities.forEach(e => {
         if(e instanceof DogNPC && !e.dead) {
             if(player.group.position.distanceTo(e.mesh.position) < 4 * player.size) {
                 const dead = e.takeHit(10 * player.size);
-                AudioSys.hit();
+                AudioSys.bark();
                 if (dead) {
                     const orb = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshBasicMaterial({color: 0x00ff00}));
                     orb.position.copy(e.mesh.position);

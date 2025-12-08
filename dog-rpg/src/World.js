@@ -3,12 +3,26 @@ import * as THREE from 'three';
 export function createWorld(scene) {
     const wallColliders = [];
 
-    // --- 1. ATMOSPHERE & LIGHTING ---
-    scene.background = new THREE.Color(0x87CEEB);
-    scene.fog = new THREE.FogExp2(0xDFE9F3, 0.005);
+import { Sky } from 'three/examples/jsm/objects/Sky.js';
 
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x222222, 0.5);
-    scene.add(hemiLight);
+export function createWorld(scene) {
+    const wallColliders = [];
+
+    // --- 1. ATMOSPHERE & LIGHTING ---
+    const sky = new Sky();
+    sky.scale.setScalar(450000);
+    scene.add(sky);
+
+    const sun = new THREE.Vector3();
+
+    const effectController = {
+        turbidity: 10,
+        rayleigh: 3,
+        mieCoefficient: 0.005,
+        mieDirectionalG: 0.7,
+        elevation: 2,
+        azimuth: 180,
+    };
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
     dirLight.position.set(100, 150, 50);
@@ -23,6 +37,26 @@ export function createWorld(scene) {
     dirLight.shadow.camera.bottom = -150;
     dirLight.shadow.bias = -0.0005;
     scene.add(dirLight);
+
+    function updateSky() {
+        const uniforms = sky.material.uniforms;
+        uniforms['turbidity'].value = effectController.turbidity;
+        uniforms['rayleigh'].value = effectController.rayleigh;
+        uniforms['mieCoefficient'].value = effectController.mieCoefficient;
+        uniforms['mieDirectionalG'].value = effectController.mieDirectionalG;
+
+        const phi = THREE.MathUtils.degToRad(90 - effectController.elevation);
+        const theta = THREE.MathUtils.degToRad(effectController.azimuth);
+
+        sun.setFromSphericalCoords(1, phi, theta);
+
+        uniforms['sunPosition'].value.copy(sun);
+        
+        dirLight.position.copy(sun).multiplyScalar(150);
+    }
+
+    updateSky();
+
 
     // --- 2. TERRAIN ---
     const groundGeo = new THREE.PlaneGeometry(500, 500, 32, 32);

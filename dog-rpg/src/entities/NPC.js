@@ -105,7 +105,7 @@ export class DogNPC extends Entity {
                 this.attackTimer += dt;
                 if(this.attackTimer > 1.0) {
                     playerClass.takeDamage(this.damage);
-                    AudioSys.bark(0.5); 
+                    AudioSys.hit(); 
                     this.mesh.position.add(this.mesh.getWorldDirection(new THREE.Vector3()).multiplyScalar(0.5)); // Lunge
                     this.attackTimer = 0;
                 }

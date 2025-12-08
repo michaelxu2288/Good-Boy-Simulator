@@ -1,14 +1,109 @@
 export const AudioSys = {
     ctx: null,
+    buffers: {}, // This will hold your loaded sound files
+    soundNames: [], // To hold the names of the loaded sounds
+    nowPlaying: null, // to track the current sound
+
     init: function() {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         this.ctx = new AudioContext();
+        
+        // Trigger the loading of sound files immediately
+        this.preloadSounds();
     },
+
     resume: function() {
         if (this.ctx && this.ctx.state === 'suspended') {
             this.ctx.resume();
         }
     },
+
+    // 1. New function to load the audio files
+    preloadSounds: async function() {
+        const soundFiles = import.meta.glob('/public/assets/*.mp3');
+        
+        for (const path in soundFiles) {
+            try {
+                const url = await soundFiles[path]();
+                const response = await fetch(url.default);
+                const arrayBuffer = await response.arrayBuffer();
+                // Decode the audio data asynchronously
+                const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+                
+                // Extracting name from path
+                const name = path.split('/').pop().replace('.mp3', '');
+                
+                this.buffers[name] = audioBuffer;
+                this.soundNames.push(name);
+
+            } catch (e) {
+                console.error(`Failed to load sound: ${path}`, e);
+            }
+        }
+    },
+
+    // 2. Helper to play a loaded sound
+    playSound: function(name, pitch = 1.0, vol = 1.0) {
+        // If context isn't ready or sound isn't loaded yet, do nothing
+        if (!this.ctx || !this.buffers[name]) {
+            console.warn(`Sound not found: ${name}`);
+            return;
+        }
+
+        if (this.nowPlaying) {
+            this.nowPlaying.stop();
+        }
+
+        const source = this.ctx.createBufferSource();
+        this.nowPlaying = source;
+        source.buffer = this.buffers[name];
+        
+        // pitch = 1.0 is normal speed. >1 is faster/higher, <1 is slower/lower
+        source.playbackRate.value = pitch; 
+
+        const gain = this.ctx.createGain();
+        gain.gain.value = vol;
+
+        source.connect(gain);
+        gain.connect(this.ctx.destination);
+        
+        source.start(0, 0, 3);
+    },
+
+    // 3. Updated specialized functions
+    bark: function(pitch=1.0) {
+        const barkSounds = this.soundNames.filter(name => name.includes('bark'));
+        if (barkSounds.length > 0) {
+            const randomBark = barkSounds[Math.floor(Math.random() * barkSounds.length)];
+            this.playSound(randomBark, pitch, 0.5); 
+        }
+    },
+
+    sniff: function() {
+        const sniffSound = this.soundNames.find(name => name.includes('sniff'));
+        if (sniffSound) {
+            this.playSound(sniffSound, 1.0, 0.4);
+        }
+    },
+
+    whine: function() {
+        const whineSound = this.soundNames.find(name => name.includes('whine'));
+        if (whineSound) {
+            this.playSound(whineSound, 1.0, 0.5);
+        }
+    },
+
+    // You can keep the old synth tones for UI sounds if you want, 
+    // or replace them with files too.
+    hit: function() { 
+        this.playTone(150, 'square', 0.1, 0.2); 
+    },
+    
+    powerup: function() { 
+        this.playTone(600, 'sine', 0.3, 0.2); 
+    },
+
+    // Kept this helper for the "hit" and "powerup" legacy sounds
     playTone: function(freq, type, dur, vol=0.1) {
         if(!this.ctx) return;
         const osc = this.ctx.createOscillator();
@@ -21,39 +116,5 @@ export const AudioSys = {
         gain.connect(this.ctx.destination);
         osc.start();
         osc.stop(this.ctx.currentTime + dur);
-    },
-    bark: function(pitch=1.0) {
-        if(!this.ctx) return;
-        const t = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(400 * pitch, t);
-        osc.frequency.exponentialRampToValueAtTime(100 * pitch, t + 0.15);
-        gain.gain.setValueAtTime(0.3, t);
-        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start(t);
-        osc.stop(t + 0.2);
-    },
-    sniff: function() {
-        if(!this.ctx) return;
-        const t = this.ctx.currentTime;
-        const bufferSize = this.ctx.sampleRate * 0.1; 
-        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
-
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = buffer;
-        const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(0.2, t);
-        gain.gain.linearRampToValueAtTime(0, t + 0.1);
-        noise.connect(gain);
-        gain.connect(this.ctx.destination);
-        noise.start();
-    },
-    hit: function() { this.playTone(150, 'square', 0.1, 0.2); },
-    powerup: function() { this.playTone(600, 'sine', 0.3, 0.2); }
+    }
 };
