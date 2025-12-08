@@ -12,7 +12,7 @@ const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
-renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.5;
 document.body.appendChild(renderer.domElement);
@@ -39,7 +39,7 @@ window.addEventListener('keydown', e => {
     if(e.code === 'KeyF') AudioSys.sniff();
     if(e.code === 'Space') interact();
     if (e.key === 'p') {
-        window.location.href = './easter_egg.html';
+        window.location.href = '/easter_egg.html';
     }
 });
 window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
