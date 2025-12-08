@@ -1,8 +1,13 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 
+export function getTerrainHeightAt(x, z) {
+    return Math.sin(x * 0.05) * Math.cos(z * 0.05) * 8;
+}
+
 export function createWorld(scene) {
     const wallColliders = [];
+    const houseEntryColliders = [];
 
     // --- 1. ATMOSPHERE & LIGHTING ---
     const sky = new Sky();
@@ -90,8 +95,7 @@ export function createWorld(scene) {
     for (let i = 0; i < posAttribute.count; i++) {
         const x = posAttribute.getX(i);
         const y = posAttribute.getY(i);
-        // Add gentle noise
-        const z = Math.sin(x * 0.05) * Math.cos(y * 0.05) * 2; 
+        const z = getTerrainHeightAt(x, y); 
         posAttribute.setZ(i, z);
     }
     groundGeo.computeVertexNormals();
@@ -120,7 +124,9 @@ export function createWorld(scene) {
     
     const dummy = new THREE.Object3D();
     for (let i = 0; i < grassCount; i++) {
-        dummy.position.set((Math.random() - 0.5) * 400, 0, (Math.random() - 0.5) * 400);
+        const x = (Math.random() - 0.5) * 400;
+        const z = (Math.random() - 0.5) * 400;
+        dummy.position.set(x, getTerrainHeightAt(x, z), z);
         
         // Don't put grass on roads (center area)
         if(Math.abs(dummy.position.x) < 22 || Math.abs(dummy.position.z) < 22) continue;
@@ -143,7 +149,7 @@ export function createWorld(scene) {
         // Asphalt
         const r = new THREE.Mesh(new THREE.PlaneGeometry(w, h), roadMat);
         r.rotation.x = -Math.PI/2;
-        r.position.set(x, 0.05, z);
+        r.position.set(x, 0.2, z);
         r.receiveShadow = true;
         roadGroup.add(r);
 
@@ -181,20 +187,39 @@ export function createWorld(scene) {
     const hydrantGeo = new THREE.CylinderGeometry(0.3, 0.3, 1, 8);
     const hydrantMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
 
-    for(let i=0; i<50; i++) {
-        const x = (Math.random() - 0.5) * 360;
-        const z = (Math.random() - 0.5) * 360;
+    const spawnedObjects = [];
+
+    for(let i=0; i<125; i++) {
+        let x, z, dist, validPosition;
+        
+        do {
+            validPosition = true;
+            x = (Math.random() - 0.5) * 360;
+            z = (Math.random() - 0.5) * 360;
+
+            for (const obj of spawnedObjects) {
+                dist = new THREE.Vector2(x, z).distanceTo(new THREE.Vector2(obj.x, obj.z));
+                if (dist < obj.radius) {
+                    validPosition = false;
+                    break;
+                }
+            }
+        } while (!validPosition);
+
 
         // Avoid roads
-        if(Math.abs(x) < 25 || Math.abs(z) < 25) continue;
-
+        if(Math.abs(x) < 15 || Math.abs(z) < 15) continue;
+        
         const type = Math.random();
+        const y = getTerrainHeightAt(x, z);
 
         if (type > 0.4) {
             // -- HOUSE --
             const w = 8 + Math.random() * 8;
             const h = 8 + Math.random() * 6;
             const d = 8 + Math.random() * 8;
+
+            spawnedObjects.push({ x, z, radius: Math.max(w, d) + 5 });
             
             const houseGroup = new THREE.Group();
             
@@ -219,20 +244,32 @@ export function createWorld(scene) {
             // Door
             const door = new THREE.Mesh(
                 new THREE.BoxGeometry(2, 4, 0.5),
-                new THREE.MeshStandardMaterial({ color: 0x4a3c31 })
+                new THREE.MeshStandardMaterial({ color: 0x4a3c31, transparent: true, opacity: 0.5 })
             );
-            door.position.set(0, 2, d/2);
+            door.position.set(0, 2, d/2 + 0.1);
 
             houseGroup.add(houseBody, roof, door);
-            houseGroup.position.set(x, 0, z);
+            houseGroup.position.set(x, y, z);
             // Random rotation 0, 90, 180, 270
             houseGroup.rotation.y = Math.floor(Math.random() * 4) * (Math.PI/2);
             
+            // Force update of world matrix for correct door collider position
+            houseGroup.updateMatrixWorld(true);
+
             scene.add(houseGroup);
             wallColliders.push(new THREE.Box3().setFromObject(houseBody));
+            
+            // Create a collider for the door
+            const doorCollider = new THREE.Box3();
+            const doorPosition = new THREE.Vector3(0, 2, d/2);
+            doorPosition.applyMatrix4(houseGroup.matrixWorld);
+            doorCollider.setFromCenterAndSize(doorPosition, new THREE.Vector3(2, 4, 2));
+            houseEntryColliders.push(doorCollider);
 
         } else if (type > 0.1) {
             // -- TREE --
+            spawnedObjects.push({ x, z, radius: 5 });
+
             const treeGroup = new THREE.Group();
             const trunk = new THREE.Mesh(trunkGeo, trunkMat);
             trunk.position.y = 1.5;
@@ -248,18 +285,20 @@ export function createWorld(scene) {
             leaves.scale.setScalar(0.8 + Math.random() * 0.6);
 
             treeGroup.add(trunk, leaves);
-            treeGroup.position.set(x, 0, z);
+            treeGroup.position.set(x, y, z);
             treeGroup.scale.setScalar(1 + Math.random() * 0.5);
             scene.add(treeGroup);
             wallColliders.push(new THREE.Box3().setFromObject(trunk));
         } else {
             // -- FIRE HYDRANT --
+            spawnedObjects.push({ x, z, radius: 2 });
+
             const hydrant = new THREE.Mesh(hydrantGeo, hydrantMat);
-            hydrant.position.set(x, 0.5, z);
+            hydrant.position.set(x, y + 0.5, z);
             hydrant.castShadow = true;
             scene.add(hydrant);
         }
     }
 
-    return { wallColliders };
+    return { wallColliders, houseEntryColliders };
 }

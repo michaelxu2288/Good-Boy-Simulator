@@ -3,6 +3,7 @@ export const AudioSys = {
     buffers: {}, // This will hold your loaded sound files
     soundNames: [], // To hold the names of the loaded sounds
     nowPlaying: null, // to track the current sound
+    voices: [],
 
     init: function() {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -10,6 +11,34 @@ export const AudioSys = {
         
         // Trigger the loading of sound files immediately
         this.preloadSounds();
+        this.loadVoices();
+    },
+
+    loadVoices: function() {
+        // Voices are loaded asynchronously
+        const checkVoices = () => {
+            this.voices = speechSynthesis.getVoices();
+            if (this.voices.length) {
+                console.log('Voices loaded:', this.voices);
+            } else {
+                setTimeout(checkVoices, 100);
+            }
+        };
+        speechSynthesis.onvoiceschanged = checkVoices;
+        checkVoices();
+    },
+
+    speak: function(text, voice, pitch = 1.0, rate = 1.0) {
+        if (!'speechSynthesis' in window) {
+            console.warn('Speech Synthesis not supported.');
+            return;
+        }
+        speechSynthesis.cancel(); // Stop any previous speech
+        const utterance = new SpeechSynthesisUtterance(text);
+        if (voice) utterance.voice = voice;
+        utterance.pitch = pitch;
+        utterance.rate = rate;
+        speechSynthesis.speak(utterance);
     },
 
     resume: function() {

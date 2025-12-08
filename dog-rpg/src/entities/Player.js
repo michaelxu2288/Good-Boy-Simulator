@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { AudioSys } from '../Audio';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
+import { getTerrainHeightAt } from '../World.js';
+
 export class Player {
     constructor(scene) {
         this.scene = scene;
@@ -31,9 +33,16 @@ export class Player {
         this.size = 1.0;
         this.xp = 0;
         this.stamina = 100;
+        this.baseSpeed = 15;
+        this.sprintSpeed = 30;
         
         // Animation Vars
         this.walkTimer = 0;
+    }
+
+    increaseSpeed(amount) {
+        this.baseSpeed += amount;
+        this.sprintSpeed += amount;
     }
 
     grow(amount) {
@@ -42,7 +51,9 @@ export class Player {
         this.hp = this.maxHp;
         this.xp += amount * 100;
         
-        this.group.scale.setScalar(this.size);
+        if (this.model) {
+            this.model.scale.setScalar(0.02 * this.size);
+        }
         
         document.getElementById('xp-bar').style.width = Math.min(100, (this.xp % 1000)/10) + '%';
         document.getElementById('level-display').innerText = `Lvl ${Math.floor(this.xp/100)+1} Beast`;
@@ -63,9 +74,7 @@ export class Player {
 
     update(dt, keys, wallColliders) {
         let isMoving = false;
-        let speed = keys.shift ? 15 : 8;
-        if(keys.shift) this.stamina -= 10*dt;
-        if(this.stamina <= 0) speed = 8;
+        let speed = keys.shift ? this.sprintSpeed : this.baseSpeed;
         
         // Rotation
         const rotSpeed = 3;
@@ -91,5 +100,8 @@ export class Player {
                 this.group.position.copy(nextPos);
             }
         }
+
+        // Terrain Following
+        this.group.position.y = getTerrainHeightAt(this.group.position.x, this.group.position.z);
     }
 }

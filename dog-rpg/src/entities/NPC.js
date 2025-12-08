@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { AudioSys } from '../Audio'; // This ../ is correct here because we are deep in the entities folder
 
+import { getTerrainHeightAt } from '../World.js';
+
 export class Entity {
     constructor(scene, x, z) {
         this.scene = scene;
@@ -14,7 +16,7 @@ export class Entity {
 
 const dialogueParts = {
     intro: ["Greetings.", "Oh a dog!", "Hey!", "Don't bite!", "Lost?", "Who's a good boy?"],
-    story: ["I used to be a chef.", "My cat hates you.", "Late for yoga.", "Where are my keys?", "Aliens are real.", "Smell the rain."]
+    story: ["I used to be a chef.", "My cat hates you.", "Late for yoga.", "Where are my keys?", "Aliens are real.", "Smell the rain."] //actual tts audio, replace with whatever u want
 };
 
 export class Human extends Entity {
@@ -40,9 +42,14 @@ export class Human extends Entity {
         this.state = 'IDLE';
         this.hasGivenTreat = false;
         
-        const i = dialogueParts.intro[Math.floor(Math.random()*dialogueParts.intro.length)];
-        const s = dialogueParts.story[Math.floor(Math.random()*dialogueParts.story.length)];
-        this.dialogue = `${i} ${s}`;
+        this.introText = dialogueParts.intro[Math.floor(Math.random()*dialogueParts.intro.length)];
+        this.storyText = dialogueParts.story[Math.floor(Math.random()*dialogueParts.story.length)];
+        
+        if (AudioSys.voices.length > 0) {
+            this.voice = AudioSys.voices[Math.floor(Math.random() * AudioSys.voices.length)];
+        }
+        this.pitch = 0.8 + Math.random() * 0.4;
+        this.rate = 0.8 + Math.random() * 0.4;
     }
 
     update(dt) {
@@ -63,6 +70,7 @@ export class Human extends Entity {
                 this.mesh.position.add(dir.multiplyScalar(3 * dt));
             }
         }
+        this.mesh.position.y = getTerrainHeightAt(this.mesh.position.x, this.mesh.position.z);
     }
 }
 
@@ -124,6 +132,7 @@ export class DogNPC extends Entity {
                 }
             }
         }
+        this.mesh.position.y = getTerrainHeightAt(this.mesh.position.x, this.mesh.position.z);
     }
 
     takeHit(dmg) {
