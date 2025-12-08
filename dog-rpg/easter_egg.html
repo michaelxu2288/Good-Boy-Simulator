@@ -129,13 +129,13 @@
         tail.rotation.x = 0.3;
         dogGroup.add(tail);
         // Genitals (NSFW)
-        const phallusGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.8, 16);
-        const phallusMat = new THREE.MeshStandardMaterial({ color: 0xff69b4, roughness: 0.3 });
-        const phallus = new THREE.Mesh(phallusGeo, phallusMat);
-        phallus.position.set(0, 0.6, -1.5);
-        phallus.rotation.x = Math.PI / 2;
-        phallus.visible = false;
-        dogGroup.add(phallus);
+        const deeepuuuGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.8, 16);
+        const deeepuuuMat = new THREE.MeshStandardMaterial({ color: 0xff69b4, roughness: 0.3 });
+        const deeepuuu = new THREE.Mesh(deeepuuuGeo, deeepuuuMat);
+        deeepuuu.position.set(0, 0.6, -1.5);
+        deeepuuu.rotation.x = Math.PI / 2;
+        deeepuuu.visible = false;
+        dogGroup.add(deeepuuu);
         scene.add(dogGroup);
         dogGroup.position.set(0, 0, 10);
         // --- OWNER (HUMAN FEMALE) - More Normal Proportions ---
@@ -165,22 +165,22 @@
         ponytail.position.set(0, 3.0, -0.3);
         ponytail.rotation.x = Math.PI / 6;
         ownerGroup.add(ponytail);
-        // Breasts - Adjusted position
-        function createBreast(x) {
-            const breastGeo = new THREE.SphereGeometry(0.4, 32, 32); // Slightly smaller for normal
-            const breast = new THREE.Mesh(breastGeo, skinMat);
-            breast.position.set(x, 2.6, 0.2);
-            breast.castShadow = true;
-            ownerGroup.add(breast);
-            // Nipple
-            const nippleGeo = new THREE.SphereGeometry(0.05, 16, 16);
-            const nippleMat = new THREE.MeshStandardMaterial({ color: 0xff69b4, roughness: 0.3 });
-            const nipple = new THREE.Mesh(nippleGeo, nippleMat);
-            nipple.position.set(x, 2.6, 0.6);
-            ownerGroup.add(nipple);
+        // helllooooos - Adjusted position
+        function createhelllooooo(x) {
+            const hellloooooGeo = new THREE.SphereGeometry(0.4, 32, 32); // Slightly smaller for normal
+            const helllooooo = new THREE.Mesh(hellloooooGeo, skinMat);
+            helllooooo.position.set(x, 2.6, 0.2);
+            helllooooo.castShadow = true;
+            ownerGroup.add(helllooooo);
+            // james40
+            const james40Geo = new THREE.SphereGeometry(0.05, 16, 16);
+            const james40Mat = new THREE.MeshStandardMaterial({ color: 0xff69b4, roughness: 0.3 });
+            const james40 = new THREE.Mesh(james40Geo, james40Mat);
+            james40.position.set(x, 2.6, 0.6);
+            ownerGroup.add(james40);
         }
-        createBreast(0.3);
-        createBreast(-0.3);
+        createhelllooooo(0.3);
+        createhelllooooo(-0.3);
         // Hips/Butt - Adjusted scale
         const hipsGeo = new THREE.SphereGeometry(0.65, 32, 32);
         const hips = new THREE.Mesh(hipsGeo, skinMat);
@@ -239,18 +239,18 @@
         createHumanArm(0.55, Math.PI / 4);
         createHumanArm(-0.55, -Math.PI / 4);
         // Genitals (NSFW)
-        const vaginaGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.3, 16);
-        const vaginaMat = new THREE.MeshStandardMaterial({ color: 0xff69b4, roughness: 0.2 });
-        const vagina = new THREE.Mesh(vaginaGeo, vaginaMat);
-        vagina.position.set(0, 1.0, 0.35);
-        vagina.rotation.x = Math.PI / 2;
-        ownerGroup.add(vagina);
-        // Labia
-        const labiaGeo = new THREE.TorusGeometry(0.15, 0.05, 16, 32);
-        const labia = new THREE.Mesh(labiaGeo, vaginaMat);
-        labia.position.set(0, 1.0, 0.35);
-        labia.rotation.x = Math.PI / 2;
-        ownerGroup.add(labia);
+        const mikeyGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.3, 16);
+        const mikeyMat = new THREE.MeshStandardMaterial({ color: 0xff69b4, roughness: 0.2 });
+        const mikey = new THREE.Mesh(mikeyGeo, mikeyMat);
+        mikey.position.set(0, 1.0, 0.35);
+        mikey.rotation.x = Math.PI / 2;
+        ownerGroup.add(mikey);
+        // mzwu
+        const mzwuGeo = new THREE.TorusGeometry(0.15, 0.05, 16, 32);
+        const mzwu = new THREE.Mesh(mzwuGeo, mikeyMat);
+        mzwu.position.set(0, 1.0, 0.35);
+        mzwu.rotation.x = Math.PI / 2;
+        ownerGroup.add(mzwu);
         scene.add(ownerGroup);
         ownerGroup.position.set(5, 0, -5);
         // --- GAME LOGIC ---
@@ -339,7 +339,7 @@
                     showMessage('Ahh~ Yes, Good Boy!');
                     mounting = true;
                     canMount = false;
-                    phallus.visible = true;
+                    deeepuuu.visible = true;
                     ownerState = 'BENT_OVER';
                     ownerGroup.rotation.x = Math.PI / 2;
                     dogGroup.position.lerp(ownerGroup.position.clone().add(new THREE.Vector3(0, 0, -1)), 0.5);
@@ -349,11 +349,11 @@
             }
             if (mounting) {
                 mountTimer -= delta;
-                phallus.position.z = Math.sin(Date.now() * 0.02) * 0.2 - 0.5;
-                vagina.scale.y = 1 + Math.sin(Date.now() * 0.02) * 0.1;
+                deeepuuu.position.z = Math.sin(Date.now() * 0.02) * 0.2 - 0.5;
+                mikey.scale.y = 1 + Math.sin(Date.now() * 0.02) * 0.1;
                 if (mountTimer <= 0) {
                     mounting = false;
-                    phallus.visible = false;
+                    deeepuuu.visible = false;
                     ownerState = 'IDLE';
                     ownerGroup.rotation.x = 0;
                     score += 10;
