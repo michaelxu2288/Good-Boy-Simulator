@@ -38,6 +38,9 @@ window.addEventListener('keydown', e => {
     if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true;
     if(e.code === 'KeyF') AudioSys.sniff();
     if(e.code === 'Space') interact();
+    if (e.key === 'p') {
+        window.location.href = './easter_egg.html';
+    }
 });
 window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
 window.addEventListener('mousedown', () => attack());

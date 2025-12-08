@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Naughty Beast Simulator 3D</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+            pointer-events: none;
+        }
+        h1 { margin: 0; font-size: 24px; }
+        p { margin: 5px 0; font-size: 16px; }
+        #score-display { font-size: 30px; color: #ff69b4; font-weight: bold; }
+        #message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 40px;
+            color: white;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px black;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<div id="ui">
+    <h1>🐕 Naughty Beast Simulator</h1>
+    <p><b>WASD / Arrows</b> to Move</p>
+    <p><b>SPACE</b> to Mount (Must be near Owner)</p>
+    <p>Pleasure Points: <span id="score-display">0</span></p>
+</div>
+<div id="message">WOOF! (Mount Me!)</div>
+<script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.159.0/build/three.module.js';
+    // Removed unused GLTFLoader import
+
+    // --- SETUP ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x4B0082); // Dim indigo for intimate atmosphere
+    scene.fog = new THREE.Fog(0x4B0082, 5, 30);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 5, 15);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    // --- LIGHTS ---
+    const ambientLight = new THREE.AmbientLight(0xff69b4, 0.4); // Pinkish ambient for NSFW vibe
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(10, 20, 10);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 4096;
+    dirLight.shadow.mapSize.height = 4096;
+    dirLight.shadow.camera.near = 0.5;
+    dirLight.shadow.camera.far = 50;
+    scene.add(dirLight);
+
+    const spotLight = new THREE.SpotLight(0xff0000, 1.5, 20, Math.PI / 4, 0.5);
+    spotLight.position.set(0, 10, 0);
+    spotLight.castShadow = true;
+    scene.add(spotLight);
+
+    // --- ENVIRONMENT (BEDROOM) ---
+    // Floor (Carpet)
+    const floorTexture = new THREE.TextureLoader().load('https://threejs.org/examples/textures/hardwood2_diffuse.jpg');
+    floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
+    floorTexture.repeat.set(4, 4);
+    const floorGeo = new THREE.PlaneGeometry(40, 40);
+    const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture, roughness: 0.8, metalness: 0 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // Walls with wallpaper
+    const wallTexture = new THREE.TextureLoader().load('https://threejs.org/examples/textures/brick_diffuse.jpg');
+    wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping;
+    wallTexture.repeat.set(8, 2);
+    function createWall(w, h, d, x, z, rotY = 0) {
+        const geo = new THREE.BoxGeometry(w, h, d);
+        const mat = new THREE.MeshStandardMaterial({ map: wallTexture, roughness: 0.6 });
+        const wall = new THREE.Mesh(geo, mat);
+        wall.position.set(x, h/2, z);
+        wall.rotation.y = rotY;
+        wall.castShadow = true;
+        wall.receiveShadow = true;
+        scene.add(wall);
+        return wall;
+    }
+    const walls = [];
+    walls.push(createWall(40, 10, 1, 0, -20)); // Back
+    walls.push(createWall(40, 10, 1, 0, 20)); // Front
+    walls.push(createWall(1, 10, 40, -20, 0, Math.PI / 2)); // Left
+    walls.push(createWall(1, 10, 40, 20, 0, Math.PI / 2)); // Right
+
+    // Bed (Central Furniture)
+    const bedFrame = new THREE.Mesh(new THREE.BoxGeometry(8, 1, 10), new THREE.MeshStandardMaterial({ color: 0x800000, roughness: 0.2 }));
+    bedFrame.position.set(0, 0.5, 0);
+    bedFrame.castShadow = true;
+    scene.add(bedFrame);
+    const mattress = new THREE.Mesh(new THREE.BoxGeometry(7.5, 1, 9.5), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }));
+    mattress.position.set(0, 1.5, 0);
+    mattress.castShadow = true;
+    scene.add(mattress);
+    walls.push(bedFrame, mattress); // Collision
+
+    // Other Furniture
+    const nightstand = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.4 }));
+    nightstand.position.set(-15, 1, -15);
+    nightstand.castShadow = true;
+    scene.add(nightstand);
+    walls.push(nightstand);
+
+    // --- PLAYER (DOG) - More Detailed Model ---
+    const dogGroup = new THREE.Group();
+
+    // Body (Torso)
+    const bodyGeo = new THREE.CylinderGeometry(0.6, 0.6, 2, 32);
+    const furTexture = new THREE.TextureLoader().load('https://threejs.org/examples/textures/terrain/grasslight-big.jpg');
+    const dogMat = new THREE.MeshStandardMaterial({ map: furTexture, color: 0x8B4513, roughness: 0.7 });
+    const body = new THREE.Mesh(bodyGeo, dogMat);
+    body.position.y = 1;
+    body.rotation.z = Math.PI / 2;
+    body.castShadow = true;
+    dogGroup.add(body);
+
+    // Legs (4)
+    function createDogLeg(x, y, z) {
+        const legGeo = new THREE.CylinderGeometry(0.2, 0.2, 1, 16);
+        const leg = new THREE.Mesh(legGeo, dogMat);
+        leg.position.set(x, y, z);
+        leg.castShadow = true;
+        dogGroup.add(leg);
+    }
+    createDogLeg(0.4, 0.5, 0.8); // Front Right
+    createDogLeg(-0.4, 0.5, 0.8); // Front Left
+    createDogLeg(0.4, 0.5, -0.8); // Back Right
+    createDogLeg(-0.4, 0.5, -0.8); // Back Left
+
+    // Head
+    const headGeo = new THREE.SphereGeometry(0.6, 32, 32);
+    const head = new THREE.Mesh(headGeo, dogMat);
+    head.position.set(0, 1.2, 1.2);
+    head.castShadow = true;
+    dogGroup.add(head);
+
+    // Ears
+    function createEar(x, rot) {
+        const earGeo = new THREE.ConeGeometry(0.2, 0.4, 16);
+        const ear = new THREE.Mesh(earGeo, dogMat);
+        ear.position.set(x, 1.6, 1.2);
+        ear.rotation.z = rot;
+        dogGroup.add(ear);
+    }
+    createEar(0.3, -0.5);
+    createEar(-0.3, 0.5);
+
+    // Tail
+    const tailGeo = new THREE.CylinderGeometry(0.1, 0.05, 1, 16);
+    const tail = new THREE.Mesh(tailGeo, dogMat);
+    tail.position.set(0, 1, -1.2);
+    tail.rotation.x = 0.3;
+    dogGroup.add(tail);
+
+    // Genitals (NSFW - Phallus for Bestiality)
+    const phallusGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.8, 16);
+    const phallusMat = new THREE.MeshStandardMaterial({ color: 0xff69b4, roughness: 0.3 });
+    const phallus = new THREE.Mesh(phallusGeo, phallusMat);
+    phallus.position.set(0, 0.6, -0.5);
+    phallus.rotation.x = Math.PI / 2;
+    phallus.visible = false; // Visible during action
+    dogGroup.add(phallus);
+
+    scene.add(dogGroup);
+    dogGroup.position.set(0, 0, 10); // Starting position
+
+    // --- OWNER (HUMAN FEMALE) - More Detailed Model ---
+    const ownerGroup = new THREE.Group();
+
+    // Torso
+    const torsoGeo = new THREE.CylinderGeometry(0.8, 0.8, 2.5, 32);
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xffdab9, roughness: 0.5, metalness: 0 }); // Peach skin
+    const torso = new THREE.Mesh(torsoGeo, skinMat);
+    torso.position.y = 2.25;
+    torso.castShadow = true;
+    ownerGroup.add(torso);
+
+    // Head
+    const ownerHeadGeo = new THREE.SphereGeometry(0.6, 32, 32);
+    const ownerHead = new THREE.Mesh(ownerHeadGeo, skinMat);
+    ownerHead.position.y = 4;
+    ownerHead.castShadow = true;
+    ownerGroup.add(ownerHead);
+
+    // Hair (Simple)
+    const hairGeo = new THREE.SphereGeometry(0.65, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+    const hairMat = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.8 });
+    const hair = new THREE.Mesh(hairGeo, hairMat);
+    hair.position.y = 4.1;
+    ownerGroup.add(hair);
+
+    // Breasts (NSFW)
+    function createBreast(x) {
+        const breastGeo = new THREE.SphereGeometry(0.4, 32, 32);
+        const breast = new THREE.Mesh(breastGeo, skinMat);
+        breast.position.set(x, 2.8, 0.3);
+        breast.castShadow = true;
+        ownerGroup.add(breast);
+    }
+    createBreast(0.4);
+    createBreast(-0.4);
+
+    // Hips/Butt
+    const hipsGeo = new THREE.SphereGeometry(1, 32, 32);
+    const hips = new THREE.Mesh(hipsGeo, skinMat);
+    hips.position.y = 1;
+    hips.scale.set(1, 0.8, 1);
+    hips.castShadow = true;
+    ownerGroup.add(hips);
+
+    // Legs
+    function createHumanLeg(x, rot) {
+        const legGeo = new THREE.CylinderGeometry(0.3, 0.3, 2.5, 32);
+        const leg = new THREE.Mesh(legGeo, skinMat);
+        leg.position.set(x, 0.75, 0);
+        leg.rotation.z = rot;
+        leg.castShadow = true;
+        ownerGroup.add(leg);
+    }
+    createHumanLeg(0.5, -0.1);
+    createHumanLeg(-0.5, 0.1);
+
+    // Arms
+    function createHumanArm(x, rot) {
+        const armGeo = new THREE.CylinderGeometry(0.2, 0.2, 2, 32);
+        const arm = new THREE.Mesh(armGeo, skinMat);
+        arm.position.set(x, 3, 0);
+        arm.rotation.z = rot;
+        arm.castShadow = true;
+        ownerGroup.add(arm);
+    }
+    createHumanArm(1, Math.PI / 4);
+    createHumanArm(-1, -Math.PI / 4);
+
+    // Genitals (NSFW - Vagina for Bestiality)
+    const vaginaGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.3, 16);
+    const vaginaMat = new THREE.MeshStandardMaterial({ color: 0xff69b4, roughness: 0.2 });
+    const vagina = new THREE.Mesh(vaginaGeo, vaginaMat);
+    vagina.position.set(0, 1.2, 0.4);
+    vagina.rotation.x = Math.PI / 2;
+    ownerGroup.add(vagina);
+
+    scene.add(ownerGroup);
+    ownerGroup.position.set(5, 0, -5);
+
+    // Owner Logic Data
+    let ownerTarget = new THREE.Vector3(5, 0, -5);
+    let ownerState = 'IDLE'; // IDLE, MOVING, BENT_OVER (for action)
+    let ownerTimer = 0;
+
+    // --- GAME LOGIC ---
+    let score = 0;
+    const keys = { w: false, a: false, s: false, d: false, space: false };
+    let canMount = true;
+    let mounting = false;
+    let mountTimer = 0;
+
+    // Input Handling
+    window.addEventListener('keydown', (e) => {
+        const key = e.key.toLowerCase();
+        if (keys.hasOwnProperty(key)) keys[key] = true;
+        if (e.code === 'Space') keys.space = true;
+        if (key === 'arrowup') keys.w = true;
+        if (key === 'arrowdown') keys.s = true;
+        if (key === 'arrowleft') keys.a = true;
+        if (key === 'arrowright') keys.d = true;
+    });
+    window.addEventListener('keyup', (e) => {
+        const key = e.key.toLowerCase();
+        if (keys.hasOwnProperty(key)) keys[key] = false;
+        if (e.code === 'Space') keys.space = false;
+        if (key === 'arrowup') keys.w = false;
+        if (key === 'arrowdown') keys.s = false;
+        if (key === 'arrowleft') keys.a = false;
+        if (key === 'arrowright') keys.d = false;
+    });
+
+    function showMessage(text = 'WOOF! (Mount Me!)') {
+        const msg = document.getElementById('message');
+        msg.innerText = text;
+        msg.style.display = 'block';
+        setTimeout(() => { msg.style.display = 'none'; }, 1000);
+    }
+
+    // --- ANIMATION LOOP ---
+    const clock = new THREE.Clock();
+
+    function animate() {
+        requestAnimationFrame(animate);
+        const delta = clock.getDelta();
+
+        // 1. Dog Movement (Disabled during mounting)
+        if (!mounting) {
+            const speed = 8 * delta;
+            const turnSpeed = 4 * delta;
+
+            // Rotation
+            if (keys.a) dogGroup.rotation.y += turnSpeed;
+            if (keys.d) dogGroup.rotation.y -= turnSpeed;
+
+            // Forward/Backward
+            const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), dogGroup.rotation.y); // Note: adjusted for model orientation
+            const nextPos = dogGroup.position.clone();
+
+            if (keys.w) nextPos.add(forward.multiplyScalar(speed));
+            if (keys.s) nextPos.add(forward.multiplyScalar(-speed));
+
+            // Simple Boundary Check
+            if (nextPos.x > -19 && nextPos.x < 19 && nextPos.z > -19 && nextPos.z < 19) {
+                dogGroup.position.copy(nextPos);
+            }
+        }
+
+        // Tail Wag
+        tail.rotation.y = Math.sin(Date.now() * 0.01) * 0.5;
+
+        // 2. Camera Follow
+        const relativeCameraOffset = new THREE.Vector3(0, 3, 10);
+        if (mounting) {
+            relativeCameraOffset.set(0, 2, 5); // Closer during action
+        }
+        const cameraOffset = relativeCameraOffset.applyMatrix4(dogGroup.matrixWorld);
+        camera.position.lerp(cameraOffset, 0.1);
+        camera.lookAt(dogGroup.position);
+
+        // 3. Owner AI (Wander, Bend Over when Mounted)
+        const distToOwner = dogGroup.position.distanceTo(ownerGroup.position);
+        if (ownerState === 'IDLE') {
+            ownerTimer += delta;
+            if (ownerTimer > 3) {
+                ownerTarget.set(
+                    (Math.random() * 30) - 15,
+                    0,
+                    (Math.random() * 30) - 15
+                );
+                ownerState = 'MOVING';
+                ownerTimer = 0;
+            }
+        } else if (ownerState === 'MOVING') {
+            const direction = new THREE.Vector3().subVectors(ownerTarget, ownerGroup.position).normalize();
+            ownerGroup.position.add(direction.multiplyScalar(3 * delta));
+
+            // Look at target
+            ownerGroup.lookAt(ownerTarget);
+
+            if (ownerGroup.position.distanceTo(ownerTarget) < 1) {
+                ownerState = 'IDLE';
+            }
+        } else if (ownerState === 'BENT_OVER') {
+            // Animation: Moan or shake
+            ownerGroup.position.y = Math.sin(Date.now() * 0.01) * 0.05;
+        }
+
+        // 4. Mounting Mechanic (Bestiality NSFW)
+        if (keys.space && canMount && !mounting) {
+            if (distToOwner < 2) { // Closer range for intimacy
+                showMessage('Ahh~ Yes, Good Boy!');
+                mounting = true;
+                canMount = false;
+                phallus.visible = true;
+                ownerState = 'BENT_OVER';
+                ownerGroup.rotation.x = Math.PI / 2; // Bend over
+                // Align dog to owner for mounting
+                dogGroup.position.lerp(ownerGroup.position.clone().add(new THREE.Vector3(0, 0, -1)), 0.5);
+                dogGroup.lookAt(ownerGroup.position);
+                mountTimer = 5; // 5 second action
+            }
+        }
+
+        if (mounting) {
+            mountTimer -= delta;
+            // Thrust animation
+            phallus.position.z = Math.sin(Date.now() * 0.02) * 0.2 - 0.5;
+            vagina.scale.y = 1 + Math.sin(Date.now() * 0.02) * 0.1; // Pulsate
+
+            if (mountTimer <= 0) {
+                mounting = false;
+                phallus.visible = false;
+                ownerState = 'IDLE';
+                ownerGroup.rotation.x = 0; // Stand up
+                score += 10; // Pleasure points
+                document.getElementById('score-display').innerText = score;
+                // Dog grows aroused (scale up)
+                const s = 1 + (score * 0.02);
+                dogGroup.scale.set(s, s, s);
+                setTimeout(() => { canMount = true; }, 5000); // Longer cooldown
+            }
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    // Handle Window Resize
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+</script>
+</body>
+</html>
