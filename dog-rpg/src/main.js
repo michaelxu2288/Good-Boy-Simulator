@@ -6,6 +6,8 @@ import { AudioSys } from './Audio'; // Notice this is ./Audio, not ../Audio
 
 import { createApartment } from './Apartment.js';
 
+import { initTouchControls } from './TouchControls.js';
+
 
 
 // --- SETUP ---
@@ -102,17 +104,33 @@ window.addEventListener('keydown', e => {
 
 window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
 
-window.addEventListener('mousedown', () => attack());
-
-window.addEventListener('resize', () => {
-
-    camera.aspect = window.innerWidth / window.innerHeight;
-
-    camera.updateProjectionMatrix();
-
-    renderer.setSize(window.innerWidth, window.innerHeight);
-
+// bite. real mouse clicks always bite (desktop unchanged, incl. touch+mouse laptops).
+// touch/pen taps never bite via the canvas — on touch, bite is the on-screen BITE button only.
+window.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    if (e.target && e.target.closest && e.target.closest('#touch-controls')) return;
+    attack();
 });
+
+// block iOS pinch-zoom (Safari ignores user-scalable=no; gesturestart is the real lever).
+document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+
+function onViewportResize() {
+    // use visualViewport (reflects the real on-screen size on iOS as the URL bar
+    // shows/hides); fall back to innerWidth/innerHeight -> identical numbers on desktop.
+    const vv = window.visualViewport;
+    const w = vv ? vv.width : window.innerWidth;
+    const h = vv ? vv.height : window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+}
+
+window.addEventListener('resize', onViewportResize);
+
+if (window.visualViewport) window.visualViewport.addEventListener('resize', onViewportResize);
+
+window.addEventListener('orientationchange', () => setTimeout(onViewportResize, 300));
 
 
 
@@ -312,6 +330,13 @@ function loadWorld() {
 
 
 
+const touch = initTouchControls({
+    keys,
+    interact,
+    attack,
+    sniff: () => AudioSys.sniff(),
+});
+
 const btnStart = document.getElementById('btn-start');
 
 if(btnStart) {
@@ -319,6 +344,8 @@ if(btnStart) {
     btnStart.addEventListener('click', () => {
 
         document.getElementById('start-screen').style.display = 'none';
+
+        touch.show();   // shows only on touch devices; audio user-gesture already satisfied
 
         AudioSys.init();
 
@@ -343,6 +370,8 @@ function animate() {
     const dt = clock.getDelta();
 
 
+
+    touch.update();   // rewrite w/a/s/d from the joystick while it's held (no-op when idle)
 
     player.update(dt, keys, worldData.wallColliders);
 

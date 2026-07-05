@@ -1,9 +1,17 @@
-body { 
-  margin: 0; 
-  overflow: hidden; 
-  background: #111; 
-  font-family: 'Courier New', Courier, monospace; 
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;            /* kill pull-to-refresh / scroll-chaining (iOS 16+) */
+  touch-action: none;                   /* block browser pan/pinch/double-tap-zoom on the play surface */
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  background: #111;
+  font-family: 'Courier New', Courier, monospace;
 }
+
+/* the WebGL canvas (appended to body) must also refuse gestures so pinch/dbl-tap don't zoom */
+canvas { touch-action: none; }
 
 #ui {
   position: absolute;
@@ -55,11 +63,99 @@ body {
   justify-content: center; align-items: center;
   color: white; z-index: 20;
 }
-button { 
-  padding: 20px 40px; 
-  font-size: 24px; 
-  cursor: pointer; 
-  background: #FFD700; 
-  border: none; 
-  font-weight: bold; 
+button {
+  padding: 20px 40px;
+  font-size: 24px;
+  cursor: pointer;
+  background: #FFD700;
+  border: none;
+  font-weight: bold;
+}
+
+/* ===== mobile touch controls ===== */
+:root {
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+}
+
+/* full-screen container: transparent to taps except its children */
+#touch-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 15;               /* above #ui(10), below #start-screen(20) */
+  display: none;             /* revealed by JS on touch devices after WAKE UP */
+  pointer-events: none;
+}
+
+/* every interactive control owns its gesture: no scroll/zoom/selection/flash */
+.touch-control {
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* left area = dynamic-origin joystick capture zone */
+#stick-zone {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 45%;
+  height: 55%;
+}
+.vj-base {
+  position: fixed;
+  width: 120px; height: 120px;
+  margin: -60px 0 0 -60px;   /* center on the client point set via left/top */
+  border-radius: 50%;
+  background: rgba(255,255,255,0.10);
+  border: 2px solid rgba(255,255,255,0.25);
+  pointer-events: none;      /* visual only */
+}
+.vj-thumb {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.35);
+  pointer-events: none;
+}
+
+/* right-side button cluster, clear of the home indicator via safe-area */
+#touch-buttons {
+  position: fixed;
+  right: calc(20px + var(--safe-r));
+  bottom: max(20px, var(--safe-b));
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 14px;
+  justify-items: center;
+}
+.tbtn {
+  width: 84px; height: 84px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.6);
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: bold;
+  padding: 0;
+  cursor: pointer;
+}
+.tbtn.pressed { background: rgba(255,215,0,0.55); }
+.tbtn-bite { border-color: #ff5555; }
+#btn-sprint.pressed { background: rgba(51,255,51,0.55); }  /* sprint toggle-on state */
+
+/* only show touch UI on coarse pointers; hide the desktop key legend there */
+@media (pointer: coarse) {
+  #controls { display: none; }
+  /* lift the dialogue box above the bottom-right button cluster so it isn't obscured */
+  #dialogue-box { bottom: calc(210px + var(--safe-b)); z-index: 16; }
+}
+/* mouse devices never see the touch overlay even if JS mis-fires */
+@media (pointer: fine) {
+  #touch-controls { display: none !important; }
 }

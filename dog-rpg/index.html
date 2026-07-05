@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, maximum-scale=1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Neighborhood Dog RPG</title>
     <link rel="stylesheet" href="/src/style.css">
 </head>
@@ -22,6 +26,17 @@
 
     <div id="controls">
         WASD: Move | SHIFT: Run | SPACE: Beg | CLICK: Bite | F: Sniff
+    </div>
+
+    <!-- on-screen touch controls (mobile); hidden on desktop + until WAKE UP -->
+    <div id="touch-controls" aria-hidden="true">
+        <div id="stick-zone" class="touch-control"></div>
+        <div id="touch-buttons">
+            <button id="btn-sprint" class="touch-control tbtn" type="button" tabindex="-1">RUN</button>
+            <button id="btn-sniff"  class="touch-control tbtn" type="button" tabindex="-1">SNIFF</button>
+            <button id="btn-beg"    class="touch-control tbtn" type="button" tabindex="-1">BEG</button>
+            <button id="btn-bite"   class="touch-control tbtn tbtn-bite" type="button" tabindex="-1">BITE</button>
+        </div>
     </div>
 
     <script type="module" src="/src/main.js"></script>
