@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/internships", "destination": "/internships.html" },
+    { "source": "/swe-internships", "destination": "/swe-internships.html" }
+  ]
+}
