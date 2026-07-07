@@ -9,6 +9,7 @@ export default defineConfig({
         easter_egg: resolve(__dirname, 'easter_egg.html'),
         internships: resolve(__dirname, 'internships.html'),
         swe_internships: resolve(__dirname, 'swe-internships.html'),
+        tesla: resolve(__dirname, 'tesla.html'),
       },
     },
   },
