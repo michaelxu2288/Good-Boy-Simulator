@@ -28,16 +28,36 @@ export class Human extends Entity {
         const shirtColor = pickClothing();
         const pantColor = pickPants();
 
-        const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.5, 0.5), new THREE.MeshStandardMaterial({color: shirtColor}));
-        body.position.y = 2.2; body.castShadow=true;
-        
-        const legs = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.5, 0.5), new THREE.MeshStandardMaterial({color: pantColor}));
-        legs.position.y = 0.75; legs.castShadow=true;
-        
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), new THREE.MeshStandardMaterial({color: PALETTE.skin}));
-        head.position.y = 3.2; head.castShadow=true;
+        const hairColor = [0x2b2118, 0x4a3527, 0x1a1a1a, 0x6b4a2f, 0x8a6a3a][Math.floor(Math.random() * 5)];
+        const shirtMat = new THREE.MeshStandardMaterial({ color: shirtColor });
+        const pantMat = new THREE.MeshStandardMaterial({ color: pantColor });
+        const skinMat = new THREE.MeshStandardMaterial({ color: PALETTE.skin });
+        const hairMat = new THREE.MeshStandardMaterial({ color: hairColor });
+        const shoeMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a });
+        const box = (w, h, d, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = true; return m; };
 
-        this.mesh.add(body, legs, head);
+        // torso + head
+        this.mesh.add(
+            box(0.78, 0.5, 0.46, pantMat, 0, 1.55, 0),     // pelvis
+            box(0.86, 1.15, 0.5, shirtMat, 0, 2.45, 0),    // chest
+            box(0.22, 0.2, 0.22, skinMat, 0, 3.15, 0),     // neck
+            box(0.5, 0.56, 0.5, skinMat, 0, 3.5, 0),       // head
+            box(0.56, 0.24, 0.56, hairMat, 0, 3.84, 0),    // hair
+        );
+        // limbs as joint-pivot groups: segment hangs below the pivot so rotation.x swings it
+        const limb = (px, py, w, h, d, mat, footMat) => {
+            const g = new THREE.Group();
+            g.position.set(px, py, 0);
+            g.add(box(w, h, d, mat, 0, -h / 2, 0));
+            if (footMat) g.add(box(w + 0.04, 0.2, d + 0.24, footMat, 0, -h + 0.05, 0.1));
+            this.mesh.add(g);
+            return g;
+        };
+        this.armL = limb(0.56, 2.95, 0.22, 1.0, 0.28, shirtMat);
+        this.armR = limb(-0.56, 2.95, 0.22, 1.0, 0.28, shirtMat);
+        this.legL = limb(0.2, 1.5, 0.3, 1.3, 0.32, pantMat, shoeMat);
+        this.legR = limb(-0.2, 1.5, 0.3, 1.3, 0.32, pantMat, shoeMat);
+
         toonify(this.mesh);
         
         this.target = new THREE.Vector3(x,0,z);
@@ -76,10 +96,16 @@ export class Human extends Entity {
         }
         this.mesh.position.y = getTerrainHeightAt(this.mesh.position.x, this.mesh.position.z);
 
-        // walking bob for a bit of life
+        // limb-swing walk cycle (arms/legs swing opposite) + gentle bob; ease to rest when idle
         if (this.state === 'WALKING') {
             this.bobPhase += dt * 9;
-            this.mesh.position.y += Math.abs(Math.sin(this.bobPhase)) * 0.12;
+            const sw = Math.sin(this.bobPhase * 0.7) * 0.7;
+            this.armL.rotation.x = sw; this.armR.rotation.x = -sw;
+            this.legL.rotation.x = -sw; this.legR.rotation.x = sw;
+            this.mesh.position.y += Math.abs(Math.sin(this.bobPhase)) * 0.06;
+        } else {
+            this.armL.rotation.x *= 0.85; this.armR.rotation.x *= 0.85;
+            this.legL.rotation.x *= 0.85; this.legR.rotation.x *= 0.85;
         }
     }
 }
