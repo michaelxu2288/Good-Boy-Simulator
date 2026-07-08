@@ -1,6 +1,29 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
-import { toonify, noOutline, pickHouse, pickRoof } from './materials.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { toonify, noOutline, pickHouse, pickRoof, TOON_RAMP } from './materials.js';
+
+// --- stylized house builder helpers (merged vertex-colored geometry = 1 draw call/house) ---
+function _paint(geo, hex) {
+    const c = new THREE.Color(hex);
+    const n = geo.attributes.position.count;
+    const arr = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(arr, 3));
+    if (geo.attributes.uv) geo.deleteAttribute('uv');
+    return geo;
+}
+function _part(geo, hex) { return _paint(geo.index ? geo.toNonIndexed() : geo, hex); }
+function _gableRoof(w, d, rh) {
+    const hw = w / 2, hd = d / 2;
+    const A = [-hw, 0, -hd], B = [hw, 0, -hd], C = [0, rh, -hd], D = [-hw, 0, hd], E = [hw, 0, hd], F = [0, rh, hd];
+    const t = (...p) => p.flat();
+    const v = [...t(A, B, C), ...t(D, F, E), ...t(A, C, F), ...t(A, F, D), ...t(B, E, F), ...t(B, F, C)];
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+    g.computeVertexNormals();
+    return g;
+}
 
 export function getTerrainHeightAt(x, z) {
     return Math.sin(x * 0.05) * Math.cos(z * 0.05) * 8;
@@ -271,6 +294,44 @@ export function createWorld(scene) {
     createRoadSegment(20, 400, 0, 0);
     scene.add(roadGroup);
 
+    // house materials (per-world so scene-swap disposal is clean); toon so toonify() skips them
+    const HOUSE_BODY_MAT = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: TOON_RAMP });
+    const HOUSE_GLASS_MAT = new THREE.MeshToonMaterial({ color: 0xdfeaf5, emissive: 0xffe6a8, emissiveIntensity: 0.35, gradientMap: TOON_RAMP });
+    noOutline(HOUSE_GLASS_MAT);
+    function buildHouse(w, h, d) {
+        const bodyHex = pickHouse(), roofHex = pickRoof(), trimHex = 0xf3ece0;
+        const opaque = [], glass = [];
+        opaque.push(_part(new THREE.BoxGeometry(w + 0.4, 1.0, d + 0.4).translate(0, 0.5, 0), 0x6f6559));      // foundation
+        opaque.push(_part(new THREE.BoxGeometry(w, h, d).translate(0, h / 2 + 0.6, 0), bodyHex));             // walls
+        opaque.push(_part(new THREE.BoxGeometry(w + 0.15, 0.4, d + 0.15).translate(0, h + 0.5, 0), trimHex)); // eave trim
+        opaque.push(_part(_gableRoof(w + 0.8, d + 0.8, Math.max(w, d) * 0.36).translate(0, h + 0.6, 0), roofHex));
+        opaque.push(_part(new THREE.BoxGeometry(0.9, h * 0.4 + 1.5, 0.9).translate(w * 0.25, h + 1.2, -d * 0.15), 0x7a6a5a)); // chimney
+        // front door + frame (protruding so the outline inks it)
+        const dw = 1.6, dh = 3.2, dy = dh / 2 + 0.6;
+        opaque.push(_part(new THREE.BoxGeometry(dw + 0.4, dh + 0.35, 0.25).translate(0, dy, d / 2 + 0.13), trimHex));
+        opaque.push(_part(new THREE.BoxGeometry(dw, dh, 0.2).translate(0, dy, d / 2 + 0.22), 0x5a4a3a));
+        // windows: protruding trim frame + emissive glass pane
+        const winY = h * 0.55 + 0.6;
+        const addWin = (x, y, z, ry) => {
+            const f = new THREE.BoxGeometry(1.5, 1.5, 0.22); if (ry) f.rotateY(ry); f.translate(x, y, z);
+            opaque.push(_part(f, trimHex));
+            const g = new THREE.BoxGeometry(1.1, 1.1, 0.14); if (ry) g.rotateY(ry); g.translate(x, y, z);
+            glass.push(g);
+        };
+        addWin(-w * 0.28, winY, d / 2 + 0.11, 0);
+        addWin(w * 0.28, winY, d / 2 + 0.11, 0);
+        addWin(w / 2 + 0.11, winY, d * 0.15, Math.PI / 2);
+        addWin(-w / 2 - 0.11, winY, -d * 0.15, Math.PI / 2);
+        addWin(0, winY, -d / 2 - 0.11, Math.PI);
+        const bodyMesh = new THREE.Mesh(mergeGeometries(opaque, false), HOUSE_BODY_MAT);
+        bodyMesh.castShadow = true; bodyMesh.receiveShadow = true;
+        const glassMesh = new THREE.Mesh(mergeGeometries(glass, false), HOUSE_GLASS_MAT);
+        const group = new THREE.Group();
+        group.add(bodyMesh, glassMesh);
+        group.userData.bodyMesh = bodyMesh;
+        return group;
+    }
+
     // --- 5. PROCEDURAL TREES & HOUSES ---
     const trunkGeo = new THREE.CylinderGeometry(0.5, 0.8, 3, 6);
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033 });
@@ -315,34 +376,7 @@ export function createWorld(scene) {
 
             spawnedObjects.push({ x, z, radius: Math.max(w, d) + 5 });
             
-            const houseGroup = new THREE.Group();
-            
-            // Walls
-            const houseBody = new THREE.Mesh(
-                new THREE.BoxGeometry(w, h, d),
-                new THREE.MeshStandardMaterial({ color: pickHouse() })
-            );
-            houseBody.position.y = h/2;
-            houseBody.castShadow = true;
-            houseBody.receiveShadow = true;
-            
-            // Roof
-            const roof = new THREE.Mesh(
-                new THREE.ConeGeometry(Math.max(w,d) * 0.8, 5, 4),
-                new THREE.MeshStandardMaterial({ color: pickRoof() })
-            );
-            roof.position.y = h + 2.5;
-            roof.rotation.y = Math.PI/4;
-            roof.castShadow = true;
-            
-            // Door
-            const door = new THREE.Mesh(
-                new THREE.BoxGeometry(2, 4, 0.5),
-                new THREE.MeshStandardMaterial({ color: 0x4a3c31, transparent: true, opacity: 0.5 })
-            );
-            door.position.set(0, 2, d/2 + 0.1);
-
-            houseGroup.add(houseBody, roof, door);
+            const houseGroup = buildHouse(w, h, d);
             houseGroup.position.set(x, y, z);
             // Random rotation 0, 90, 180, 270
             houseGroup.rotation.y = Math.floor(Math.random() * 4) * (Math.PI/2);
@@ -351,7 +385,7 @@ export function createWorld(scene) {
             houseGroup.updateMatrixWorld(true);
 
             scene.add(houseGroup);
-            wallColliders.push(new THREE.Box3().setFromObject(houseBody));
+            wallColliders.push(new THREE.Box3().setFromObject(houseGroup.userData.bodyMesh));
             
             // Create a collider for the door
             const doorCollider = new THREE.Box3();
