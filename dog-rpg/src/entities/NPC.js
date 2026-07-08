@@ -21,6 +21,23 @@ const dialogueParts = {
     story: ["I used to be a chef.", "My cat hates you.", "Late for yoga.", "Where are my keys?", "Aliens are real.", "Smell the rain."] //actual tts audio, replace with whatever u want
 };
 
+const _dummy = new THREE.Object3D();
+// ease heading toward a target using the SAME lookAt convention (yaw-only), slerped so
+// turns are smooth instead of an instant snap.
+function faceSmooth(mesh, tx, tz, rate, dt) {
+    _dummy.position.copy(mesh.position);
+    _dummy.lookAt(tx, mesh.position.y, tz);
+    mesh.quaternion.slerp(_dummy.quaternion, Math.min(1, rate * dt));
+}
+// pick a gentle nearby wander target that stays inside the world (was rand*300 -> NPCs
+// marched in straight lines up the far edge hills).
+function pickWander(out, pos) {
+    const a = Math.random() * Math.PI * 2, dist = 10 + Math.random() * 40;
+    let x = pos.x + Math.sin(a) * dist, z = pos.z + Math.cos(a) * dist;
+    const r = Math.hypot(x, z); if (r > 170) { x *= 170 / r; z *= 170 / r; }
+    out.set(x, 0, z);
+}
+
 export class Human extends Entity {
     constructor(scene, x, z) {
         super(scene, x, z);
@@ -81,7 +98,7 @@ export class Human extends Entity {
             this.timer += dt;
             if(this.timer > 3) {
                 this.state = 'WALKING';
-                this.target.set((Math.random()-0.5)*300, 0, (Math.random()-0.5)*300);
+                pickWander(this.target, this.mesh.position);
                 this.timer = 0;
             }
         } else if (this.state === 'WALKING') {
@@ -90,7 +107,7 @@ export class Human extends Entity {
                 this.state = 'IDLE';
             } else {
                 dir.normalize();
-                this.mesh.lookAt(this.target.x, this.mesh.position.y, this.target.z);   // yaw only — y=0 tilted people on hills
+                faceSmooth(this.mesh, this.target.x, this.target.z, 6, dt);   // smooth yaw (was an instant lookAt snap)
                 this.mesh.position.add(dir.multiplyScalar(3 * dt));
             }
         }
@@ -157,7 +174,7 @@ export class DogNPC extends Entity {
         if(this.isHostile) {
             if(distToPlayer > 2 && distToPlayer < 30) {
                 const dir = new THREE.Vector3().subVectors(playerPos, this.mesh.position).normalize();
-                this.mesh.lookAt(playerPos.x, this.mesh.position.y, playerPos.z);   // yaw only — y=0 pitched the dog nose-down into hills
+                faceSmooth(this.mesh, playerPos.x, playerPos.z, 8, dt);   // smooth yaw toward player
                 this.mesh.position.add(dir.multiplyScalar(6 * dt));
             } else if (distToPlayer <= 2) {
                 this.attackTimer += dt;
@@ -174,10 +191,10 @@ export class DogNPC extends Entity {
             if(this.state === 'WANDER') {
                 const dir = new THREE.Vector3().subVectors(this.target, this.mesh.position);
                 if(dir.length() < 1) {
-                    this.target.set((Math.random()-0.5)*300, 0, (Math.random()-0.5)*300);
-                    this.mesh.lookAt(this.target.x, this.mesh.position.y, this.target.z);   // yaw only — y=0 pitched the dog into the terrain
+                    pickWander(this.target, this.mesh.position);
                 } else {
                     dir.normalize();
+                    faceSmooth(this.mesh, this.target.x, this.target.z, 5, dt);   // smooth yaw while wandering
                     this.mesh.position.add(dir.multiplyScalar(4 * dt));
                 }
             }
