@@ -139,8 +139,8 @@ export class DogNPC extends Entity {
             clone.scale.setScalar(0.02);
             clone.rotation.x = -Math.PI / 2;   // stand upright, exactly like the player dog
             clone.position.y = 0.1;
-            const wrap = new THREE.Group();    // spin the wrapper (clean vertical) for facing — avoids the Euler upside-down flip
-            wrap.rotation.y = Math.PI;
+            const wrap = new THREE.Group();    // clean vertical spin for facing (upright, no Euler flip)
+            wrap.rotation.y = 0;
             wrap.add(clone);
             this.mesh.add(wrap);
             this.mesh.scale.setScalar(scale);
