@@ -3,6 +3,7 @@ import { AudioSys } from '../Audio'; // This ../ is correct here because we are 
 
 import { getTerrainHeightAt } from '../World.js';
 import { toonify, pickClothing, pickPants, pickDogFur, PALETTE } from '../materials.js';
+import { makeDogClone } from '../dogAsset.js';
 
 export class Entity {
     constructor(scene, x, z) {
@@ -90,15 +91,24 @@ export class DogNPC extends Entity {
         const color = pickDogFur();
         const scale = 0.8 + Math.random() * 0.7;
         
-        const mat = new THREE.MeshStandardMaterial({color: color});
-        const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 2), mat);
-        body.position.y = 1; body.castShadow=true;
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), mat);
-        head.position.set(0, 1.8, 1.2); head.castShadow=true;
-        
-        this.mesh.add(body, head);
-        this.mesh.scale.setScalar(scale);
-        toonify(this.mesh);
+        const clone = makeDogClone(color);
+        if (clone) {
+            clone.scale.setScalar(0.02);
+            clone.rotation.set(-Math.PI / 2, Math.PI, 0);   // stand upright + face the walk direction
+            clone.position.y = 0.1;
+            this.mesh.add(clone);
+            this.mesh.scale.setScalar(scale);
+        } else {
+            // fallback box dog if the GLB didn't load
+            const mat = new THREE.MeshStandardMaterial({color: color});
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 2), mat);
+            body.position.y = 1; body.castShadow=true;
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), mat);
+            head.position.set(0, 1.8, 1.2); head.castShadow=true;
+            this.mesh.add(body, head);
+            this.mesh.scale.setScalar(scale);
+            toonify(this.mesh);
+        }
         
         this.scaleVal = scale;
         this.hp = 30 * scale;

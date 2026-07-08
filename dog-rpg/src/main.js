@@ -14,6 +14,7 @@ import { initVFX, updateVFX, burst } from './vfx.js';
 
 import { showToast } from './ui.js';
 import { TOON_RAMP } from './materials.js';
+import { preloadDog } from './dogAsset.js';
 
 
 
@@ -120,7 +121,7 @@ function spawnEntities() {
 
 }
 
-spawnEntities();
+preloadDog().then(spawnEntities);   // wait for the dog model so NPC dogs spawn as clones, not boxes
 
 
 
