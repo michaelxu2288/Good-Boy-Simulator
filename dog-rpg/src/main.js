@@ -12,6 +12,9 @@ import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 
 import { initVFX, updateVFX, burst } from './vfx.js';
 
+import { showToast } from './ui.js';
+import { TOON_RAMP } from './materials.js';
+
 
 
 // --- SETUP ---
@@ -20,7 +23,7 @@ const scene = new THREE.Scene();
 
 
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 200);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 320);
 
 const renderer = new THREE.WebGLRenderer({antialias: true, powerPreference: 'high-performance'});
 
@@ -47,6 +50,8 @@ document.body.appendChild(renderer.domElement);
 
 // cel ink-outline wrapper: renders the scene with inverted-hull outlines for the toon look.
 const outline = new OutlineEffect(renderer, { defaultThickness: 0.008, defaultColor: [0.05, 0.04, 0.05], defaultAlpha: 0.9 });
+// outline does a 2nd full render pass; keep it desktop-only so mobile (coarse pointer) stays fast.
+outline.enabled = !(matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0);
 
 // camera juice: trauma-based screen shake (decays each frame)
 let trauma = 0;
@@ -69,16 +74,7 @@ function setGlow(entity, on) {
     });
 }
 
-// single-timer toast so overlapping messages don't hide each other early
-let _toastTimer = null;
-function showToast(msg, ms = 3000) {
-    const box = document.getElementById('dialogue-box');
-    if (!box) return;
-    box.style.display = 'block';
-    box.innerText = msg;
-    if (_toastTimer) clearTimeout(_toastTimer);
-    _toastTimer = setTimeout(() => { box.style.display = 'none'; _toastTimer = null; }, ms);
-}
+// single-timer toast lives in ./ui.js (shared with Player.js death notice)
 
 
 
@@ -290,10 +286,11 @@ function disposeScene(root) {
             for (const m of mats) {
                 for (const key in m) {
                     const val = m[key];
-                    if (val && val.isTexture) val.dispose();
+                    if (val && val.isTexture && val !== TOON_RAMP) val.dispose();  // keep the shared toon ramp alive
                 }
                 m.dispose();
             }
+            if (obj.isInstancedMesh) obj.dispose();  // frees instanceMatrix/instanceColor GL buffers
         });
         root.remove(child);
     }
@@ -318,6 +315,7 @@ function loadApartment() {
     disposeScene(scene);
 
     treats.length = 0;
+    highlighted = null;
 
 
 
@@ -360,6 +358,7 @@ function loadWorld() {
     disposeScene(scene);
 
     treats.length = 0;
+    highlighted = null;
 
 
 
@@ -550,6 +549,8 @@ function animate() {
         camera.position.set(player.group.position.x, player.group.position.y + 50, player.group.position.z);
 
         camera.lookAt(player.group.position);
+
+        if (camera.fov !== 60) { camera.fov = 60; camera.updateProjectionMatrix(); }   // reset any sprint FOV kick indoors
 
     } else {
 

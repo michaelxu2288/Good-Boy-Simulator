@@ -67,6 +67,32 @@ export function createWorld(scene) {
 
     updateSky();
 
+    // stylized drifting clouds (cheap camera-facing billboards, fog-exempt, no outline)
+    function makeCloudTexture() {
+        const c = document.createElement('canvas'); c.width = 128; c.height = 128;
+        const cx2 = c.getContext('2d');
+        for (let i = 0; i < 6; i++) {
+            const x = 28 + Math.random() * 72, y = 44 + Math.random() * 40, r = 18 + Math.random() * 30;
+            const g = cx2.createRadialGradient(x, y, 0, x, y, r);
+            g.addColorStop(0, 'rgba(255,255,255,0.95)');
+            g.addColorStop(1, 'rgba(255,255,255,0)');
+            cx2.fillStyle = g; cx2.beginPath(); cx2.arc(x, y, r, 0, Math.PI * 2); cx2.fill();
+        }
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+    }
+    const cloudTex = makeCloudTexture();
+    const clouds = [];
+    for (let i = 0; i < 12; i++) {
+        const cm = new THREE.SpriteMaterial({ map: cloudTex, transparent: true, opacity: 0.9, depthWrite: false, fog: false });
+        cm.userData.outlineParameters = { visible: false };
+        const s = new THREE.Sprite(cm);
+        s.userData.baseX = (Math.random() - 0.5) * 560;
+        s.userData.driftX = 1.2 + Math.random() * 2.2;
+        s.position.set(s.userData.baseX, 60 + Math.random() * 38, (Math.random() - 0.5) * 560);
+        const sc = 60 + Math.random() * 60; s.scale.set(sc, sc * 0.6, 1);
+        scene.add(s); clouds.push(s);
+    }
+
 
     // --- 2. TERRAIN ---
     function createGrassTexture() {
@@ -369,7 +395,7 @@ export function createWorld(scene) {
     }
 
     // atmosphere + one-shot cel conversion of everything built above
-    scene.fog = new THREE.FogExp2(0xc6dcee, 0.0052);
+    scene.fog = new THREE.FogExp2(0xc6dcee, 0.0058);
     toonify(scene);
     noOutline(floor.material);          // don't outline the 500u ground plane
     noOutline(grassField.material);     // don't outline 8000 grass instances
@@ -390,6 +416,12 @@ export function createWorld(scene) {
         );
     };
 
-    // live per-frame handle (§05): lets the loop drive wind (and later day/night).
-    return { wallColliders, houseEntryColliders, update(t) { windUniform.value = t; } };
+    // live per-frame handle (§05): lets the loop drive wind + cloud drift (and later day/night).
+    return {
+        wallColliders, houseEntryColliders,
+        update(t) {
+            windUniform.value = t;
+            for (const c of clouds) c.position.x = ((c.userData.baseX + t * c.userData.driftX + 280) % 560) - 280;
+        },
+    };
 }

@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import { getTerrainHeightAt } from '../World.js';
 import { toonify } from '../materials.js';
+import { showToast } from '../ui.js';
 
 export class Player {
     constructor(scene) {
@@ -71,14 +72,8 @@ export class Player {
             this.hp = 0;
             this.group.position.set(0,0,0);
             this.hp = this.maxHp;
-            // non-blocking notice (was a blocking alert() that froze the render loop
-            // and could stall audio on iOS Safari).
-            const box = document.getElementById('dialogue-box');
-            if (box) {
-                box.style.display = 'block';
-                box.innerText = 'You were knocked out! Waking up at home...';
-                setTimeout(() => { box.style.display = 'none'; }, 2500);
-            }
+            // non-blocking notice via the shared single-timer toast.
+            showToast('You were knocked out! Waking up at home...', 2500);
         }
         document.getElementById('hp-bar').style.width = (this.hp / this.maxHp * 100) + '%';
     }

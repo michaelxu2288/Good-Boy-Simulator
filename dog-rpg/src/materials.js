@@ -54,10 +54,13 @@ const _convertible = (m) =>
 // InstancedMesh materials are auto-excluded from outlines. call once after a
 // scene or model is built.
 export function toonify(root) {
+    const cache = new Map();   // source material.uuid -> shared toon material (preserve sharing)
     root.traverse((o) => {
         if (!o.isMesh || !o.material) return;
         const conv = (mat) => {
             if (!_convertible(mat)) return mat;
+            const hit = cache.get(mat.uuid);
+            if (hit) return hit;
             const t = new THREE.MeshToonMaterial({
                 color: mat.color ? mat.color.clone() : new THREE.Color(0xffffff),
                 map: mat.map || null,
@@ -70,6 +73,7 @@ export function toonify(root) {
             });
             if (t.map) t.map.colorSpace = THREE.SRGBColorSpace;
             if (o.isInstancedMesh) noOutline(t);
+            cache.set(mat.uuid, t);
             mat.dispose();
             return t;
         };
