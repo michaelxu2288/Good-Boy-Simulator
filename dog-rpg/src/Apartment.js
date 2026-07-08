@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
+import { toonify, noOutline } from './materials.js';
 
 export function createApartment(scene) {
     const wallColliders = [];
@@ -10,6 +11,7 @@ export function createApartment(scene) {
     const sky = new Sky();
     sky.scale.setScalar(450000);
     scene.add(sky);
+    noOutline(sky.material);
 
     const sun = new THREE.Vector3();
     const effectController = {
@@ -21,14 +23,16 @@ export function createApartment(scene) {
         azimuth: 180,
     };
     
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(ambientLight);
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x8a8a8a, 0.85);
+    scene.add(hemiLight);
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
     dirLight.position.set(50, 100, 50);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 4096;
-    dirLight.shadow.mapSize.height = 4096;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.normalBias = 0.03;
+    dirLight.shadow.radius = 3.5;
     dirLight.shadow.camera.left = -100;
     dirLight.shadow.camera.right = 100;
     dirLight.shadow.camera.top = 100;
@@ -226,6 +230,9 @@ export function createApartment(scene) {
     const exitDoorCollider = new THREE.Box3();
     exitDoorCollider.setFromObject(exitDoor);
     exitColliders.push(exitDoorCollider);
+
+    scene.fog = null;   // interior: no distance fog
+    toonify(scene);
 
     return { wallColliders, exitColliders };
 }

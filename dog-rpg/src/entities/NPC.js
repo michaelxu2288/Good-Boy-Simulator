@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { AudioSys } from '../Audio'; // This ../ is correct here because we are deep in the entities folder
 
 import { getTerrainHeightAt } from '../World.js';
+import { toonify, pickClothing, pickPants, pickDogFur, PALETTE } from '../materials.js';
 
 export class Entity {
     constructor(scene, x, z) {
@@ -23,8 +24,8 @@ export class Human extends Entity {
     constructor(scene, x, z) {
         super(scene, x, z);
         
-        const shirtColor = Math.floor(Math.random()*16777215);
-        const pantColor = Math.floor(Math.random()*16777215);
+        const shirtColor = pickClothing();
+        const pantColor = pickPants();
 
         const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.5, 0.5), new THREE.MeshStandardMaterial({color: shirtColor}));
         body.position.y = 2.2; body.castShadow=true;
@@ -32,15 +33,17 @@ export class Human extends Entity {
         const legs = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.5, 0.5), new THREE.MeshStandardMaterial({color: pantColor}));
         legs.position.y = 0.75; legs.castShadow=true;
         
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), new THREE.MeshStandardMaterial({color: 0xffccaa}));
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), new THREE.MeshStandardMaterial({color: PALETTE.skin}));
         head.position.y = 3.2; head.castShadow=true;
 
         this.mesh.add(body, legs, head);
+        toonify(this.mesh);
         
         this.target = new THREE.Vector3(x,0,z);
         this.timer = 0;
         this.state = 'IDLE';
         this.hasGivenTreat = false;
+        this.bobPhase = Math.random() * 6;
         
         this.introText = dialogueParts.intro[Math.floor(Math.random()*dialogueParts.intro.length)];
         this.storyText = dialogueParts.story[Math.floor(Math.random()*dialogueParts.story.length)];
@@ -71,6 +74,12 @@ export class Human extends Entity {
             }
         }
         this.mesh.position.y = getTerrainHeightAt(this.mesh.position.x, this.mesh.position.z);
+
+        // walking bob for a bit of life
+        if (this.state === 'WALKING') {
+            this.bobPhase += dt * 9;
+            this.mesh.position.y += Math.abs(Math.sin(this.bobPhase)) * 0.12;
+        }
     }
 }
 
@@ -78,7 +87,7 @@ export class DogNPC extends Entity {
     constructor(scene, x, z) {
         super(scene, x, z);
         
-        const color = Math.floor(Math.random()*16777215);
+        const color = pickDogFur();
         const scale = 0.8 + Math.random() * 0.7;
         
         const mat = new THREE.MeshStandardMaterial({color: color});
@@ -89,6 +98,7 @@ export class DogNPC extends Entity {
         
         this.mesh.add(body, head);
         this.mesh.scale.setScalar(scale);
+        toonify(this.mesh);
         
         this.scaleVal = scale;
         this.hp = 30 * scale;
@@ -97,6 +107,7 @@ export class DogNPC extends Entity {
         this.target = new THREE.Vector3(x,0,z);
         this.isHostile = false;
         this.attackTimer = 0;
+        this.bobPhase = Math.random() * 6;
     }
 
     update(dt, playerPos, playerClass) {
@@ -133,6 +144,12 @@ export class DogNPC extends Entity {
             }
         }
         this.mesh.position.y = getTerrainHeightAt(this.mesh.position.x, this.mesh.position.z);
+
+        // bob while active (chasing or wandering)
+        if (!this.dead && (this.isHostile || this.state === 'WANDER')) {
+            this.bobPhase += dt * 11;
+            this.mesh.position.y += Math.abs(Math.sin(this.bobPhase)) * 0.1 * this.scaleVal;
+        }
     }
 
     takeHit(dmg) {

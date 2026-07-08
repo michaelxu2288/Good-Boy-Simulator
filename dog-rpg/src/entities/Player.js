@@ -3,6 +3,7 @@ import { AudioSys } from '../Audio';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import { getTerrainHeightAt } from '../World.js';
+import { toonify } from '../materials.js';
 
 export class Player {
     constructor(scene) {
@@ -22,6 +23,7 @@ export class Player {
                     node.receiveShadow = true;
                 }
             });
+            toonify(this.model);   // cel-shade the dog to match the world
             this.group.add(this.model);
         });
 
@@ -55,7 +57,9 @@ export class Player {
             this.model.scale.setScalar(0.02 * this.size);
         }
         
-        document.getElementById('xp-bar').style.width = Math.min(100, (this.xp % 1000)/10) + '%';
+        // xp bar shows progress within the current level (100 xp/level), matching the
+        // level counter below (was /1000, so the bar desynced from levels).
+        document.getElementById('xp-bar').style.width = (this.xp % 100) + '%';
         document.getElementById('level-display').innerText = `Lvl ${Math.floor(this.xp/100)+1} Beast`;
         AudioSys.powerup();
     }
@@ -67,7 +71,14 @@ export class Player {
             this.hp = 0;
             this.group.position.set(0,0,0);
             this.hp = this.maxHp;
-            alert("You were knocked out! Waking up at home...");
+            // non-blocking notice (was a blocking alert() that froze the render loop
+            // and could stall audio on iOS Safari).
+            const box = document.getElementById('dialogue-box');
+            if (box) {
+                box.style.display = 'block';
+                box.innerText = 'You were knocked out! Waking up at home...';
+                setTimeout(() => { box.style.display = 'none'; }, 2500);
+            }
         }
         document.getElementById('hp-bar').style.width = (this.hp / this.maxHp * 100) + '%';
     }
@@ -103,5 +114,13 @@ export class Player {
 
         // Terrain Following
         this.group.position.y = getTerrainHeightAt(this.group.position.x, this.group.position.z);
+
+        // procedural bounce so the (un-rigged) dog looks alive while moving — advances a
+        // gait timer and hops the model on |sin|. faster + higher while sprinting.
+        if (this.model) {
+            if (isMoving) this.walkTimer += dt * (keys.shift ? 16 : 11);
+            const bob = isMoving ? Math.abs(Math.sin(this.walkTimer)) * 0.22 * this.size : 0;
+            this.model.position.y = 0.1 + bob;
+        }
     }
 }

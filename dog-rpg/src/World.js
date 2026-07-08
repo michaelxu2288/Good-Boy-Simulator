@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
+import { toonify, noOutline, pickHouse, pickRoof } from './materials.js';
 
 export function getTerrainHeightAt(x, z) {
     return Math.sin(x * 0.05) * Math.cos(z * 0.05) * 8;
@@ -13,6 +14,7 @@ export function createWorld(scene) {
     const sky = new Sky();
     sky.scale.setScalar(450000);
     scene.add(sky);
+    noOutline(sky.material);   // never ink-outline the giant sky box
 
     const sun = new THREE.Vector3();
 
@@ -25,21 +27,25 @@ export function createWorld(scene) {
         azimuth: 180,
     };
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    scene.add(ambientLight);
+    // hemisphere fill (sky/ground bounce) instead of flat ambient — stops toon
+    // shadow bands from going dead grey and adds free color grading.
+    const hemiLight = new THREE.HemisphereLight(0xbcd4ff, 0x6b7f4a, 0.6);
+    scene.add(hemiLight);
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
     dirLight.position.set(100, 150, 50);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 4096;
-    dirLight.shadow.mapSize.height = 4096;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
     dirLight.shadow.camera.near = 0.5;
     dirLight.shadow.camera.far = 500;
     dirLight.shadow.camera.left = -150;
     dirLight.shadow.camera.right = 150;
     dirLight.shadow.camera.top = 150;
     dirLight.shadow.camera.bottom = -150;
-    dirLight.shadow.bias = -0.0005;
+    dirLight.shadow.bias = -0.0001;
+    dirLight.shadow.normalBias = 0.03;
+    dirLight.shadow.radius = 3.5;
     scene.add(dirLight);
 
     function updateSky() {
@@ -85,7 +91,9 @@ export function createWorld(scene) {
             context.stroke();
         }
         
-        return new THREE.CanvasTexture(canvas);
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.colorSpace = THREE.SRGBColorSpace;   // color map; without this the ground reads desaturated
+        return tex;
     }
 
     const groundGeo = new THREE.PlaneGeometry(500, 500, 32, 32);
@@ -142,7 +150,7 @@ export function createWorld(scene) {
 
     // --- 4. ROADS & SIDEWALKS ---
     const roadGroup = new THREE.Group();
-    const roadMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 });
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0x646973, roughness: 0.9 });
     const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x999999 });
 
     function createRoadSegment(w, h, x, z) {
@@ -262,7 +270,7 @@ export function createWorld(scene) {
             // Walls
             const houseBody = new THREE.Mesh(
                 new THREE.BoxGeometry(w, h, d),
-                new THREE.MeshStandardMaterial({ color: Math.random() * 0xffffff })
+                new THREE.MeshStandardMaterial({ color: pickHouse() })
             );
             houseBody.position.y = h/2;
             houseBody.castShadow = true;
@@ -271,7 +279,7 @@ export function createWorld(scene) {
             // Roof
             const roof = new THREE.Mesh(
                 new THREE.ConeGeometry(Math.max(w,d) * 0.8, 5, 4),
-                new THREE.MeshStandardMaterial({ color: 0x333333 })
+                new THREE.MeshStandardMaterial({ color: pickRoof() })
             );
             roof.position.y = h + 2.5;
             roof.rotation.y = Math.PI/4;
@@ -336,5 +344,27 @@ export function createWorld(scene) {
         }
     }
 
-    return { wallColliders, houseEntryColliders };
+    // atmosphere + one-shot cel conversion of everything built above
+    scene.fog = new THREE.FogExp2(0xcfe3f2, 0.0055);
+    toonify(scene);
+    noOutline(floor.material);          // don't outline the 500u ground plane
+    noOutline(grassField.material);     // don't outline 8000 grass instances
+
+    // grass wind: sway blade tips via a per-instance-phased vertex offset (§13)
+    const windUniform = { value: 0 };
+    grassField.material.onBeforeCompile = (shader) => {
+        shader.uniforms.uTime = windUniform;
+        shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader;
+        shader.vertexShader = shader.vertexShader.replace(
+            '#include <begin_vertex>',
+            `#include <begin_vertex>
+            float _phase = instanceMatrix[3].x * 0.35 + instanceMatrix[3].z * 0.35;
+            float _sway = sin(uTime * 1.8 + _phase) * 0.14 * (position.y + 0.4);
+            transformed.x += _sway;
+            transformed.z += _sway * 0.5;`
+        );
+    };
+
+    // live per-frame handle (§05): lets the loop drive wind (and later day/night).
+    return { wallColliders, houseEntryColliders, update(t) { windUniform.value = t; } };
 }

@@ -8,6 +8,10 @@ import { createApartment } from './Apartment.js';
 
 import { initTouchControls } from './TouchControls.js';
 
+import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
+
+import { initVFX, updateVFX, burst } from './vfx.js';
+
 
 
 // --- SETUP ---
@@ -18,21 +22,63 @@ const scene = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 200);
 
-const renderer = new THREE.WebGLRenderer({antialias: true});
+const renderer = new THREE.WebGLRenderer({antialias: true, powerPreference: 'high-performance'});
+
+// clamp device pixel ratio: the game never set it, so it rendered at 1x and was
+// browser-upscaled. 2x on desktop for sharpness, 1.5x on mobile to protect fill-rate.
+// setSize() preserves this ratio, so the resize handler doesn't need to re-apply it.
+const _dprCap = (matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0) ? 1.5 : 2;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, _dprCap));
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 renderer.shadowMap.enabled = true;
 
-renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+// Neutral tone mapping at exposure 1.0 (was ACES @0.5, which crushed everything dark).
+renderer.toneMapping = THREE.NeutralToneMapping;
 
-renderer.toneMappingExposure = 0.5;
+renderer.toneMappingExposure = 1.0;
 
 document.body.appendChild(renderer.domElement);
+
+// cel ink-outline wrapper: renders the scene with inverted-hull outlines for the toon look.
+const outline = new OutlineEffect(renderer, { defaultThickness: 0.008, defaultColor: [0.05, 0.04, 0.05], defaultAlpha: 0.9 });
+
+// camera juice: trauma-based screen shake (decays each frame)
+let trauma = 0;
+function addTrauma(amount) { trauma = Math.min(1, trauma + amount); }
+let elapsed = 0;
+initVFX(scene);
+
+// sniff = sound + a little scent puff (ties the new VFX to the interaction)
+function doSniff() {
+    AudioSys.sniff();
+    burst(player.group.position.clone().add(new THREE.Vector3(0, 0.35, 0)), 0xd9c7a0, 10, 2.2, 0.22);
+}
+
+// nearest-beggable-human highlight: subtle gold emissive tell (§27 feedback)
+let highlighted = null;
+function setGlow(entity, on) {
+    if (!entity) return;
+    entity.mesh.traverse((o) => {
+        if (o.material && o.material.emissive) o.material.emissive.setHex(on ? 0x3a2f0e : 0x000000);
+    });
+}
+
+// single-timer toast so overlapping messages don't hide each other early
+let _toastTimer = null;
+function showToast(msg, ms = 3000) {
+    const box = document.getElementById('dialogue-box');
+    if (!box) return;
+    box.style.display = 'block';
+    box.innerText = msg;
+    if (_toastTimer) clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => { box.style.display = 'none'; _toastTimer = null; }, ms);
+}
 
 
 
@@ -90,7 +136,7 @@ window.addEventListener('keydown', e => {
 
     if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true;
 
-    if(e.code === 'KeyF') AudioSys.sniff();
+    if(e.code === 'KeyF') doSniff();
 
     if(e.code === 'Space') interact();
 
@@ -166,8 +212,7 @@ function interact() {
         player.group.rotation.x = -0.5; // Tilt up
         setTimeout(() => player.group.rotation.x = 0, 500);
 
-        box.style.display = 'block';
-        box.innerText = closest.introText;
+        showToast(closest.introText, 3000);
         
         if(!closest.hasGivenTreat) {
             closest.hasGivenTreat = true;
@@ -180,7 +225,6 @@ function interact() {
                 box.innerText += "\n(They dropped a treat!)";
             }, 1000);
         }
-        setTimeout(() => box.style.display = 'none', 3000);
     } else {
         AudioSys.whine();
     }
@@ -205,12 +249,12 @@ function attack() {
 
                 AudioSys.bark();
 
+                addTrauma(0.3);
+
                 if (dead) {
+                    addTrauma(0.45);
                     player.increaseSpeed(5);
-                    const box = document.getElementById('dialogue-box');
-                    box.style.display = 'block';
-                    box.innerText = 'u slimed a dog, +5 speed, +5 sprint';
-                    setTimeout(() => box.style.display = 'none', 3000);
+                    showToast('u slimed a dog, +5 speed, +5 sprint', 3000);
 
                     const orb = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshBasicMaterial({color: 0x00ff00}));
                     orb.position.copy(e.mesh.position);
@@ -218,6 +262,7 @@ function attack() {
                     orb.userData = { type: 'essence', value: e.scaleVal * 0.2 };
                     scene.add(orb);
                     treats.push(orb);
+                    burst(orb.position.clone(), 0x9be7a0, 22, 8);
                 }
 
             }
@@ -229,6 +274,30 @@ function attack() {
 }
 
 
+
+// free GPU resources (geometry / materials / textures) for everything under a node, then
+// detach it. fixes the scene-swap leak that grew GPU memory on every house entry/exit and
+// could crash the WebGL context on mobile Safari. the player.group is skipped so the dog
+// model survives the swap.
+function disposeScene(root) {
+    for (let i = root.children.length - 1; i >= 0; i--) {
+        const child = root.children[i];
+        if (child === player.group) continue;
+        child.traverse((obj) => {
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.isLight && obj.shadow && obj.shadow.map) obj.shadow.map.dispose();
+            const mats = Array.isArray(obj.material) ? obj.material : (obj.material ? [obj.material] : []);
+            for (const m of mats) {
+                for (const key in m) {
+                    const val = m[key];
+                    if (val && val.isTexture) val.dispose();
+                }
+                m.dispose();
+            }
+        });
+        root.remove(child);
+    }
+}
 
 let inApartment = false;
 
@@ -244,13 +313,11 @@ function loadApartment() {
 
 
 
-    // Clear the scene
+    // free the old scene's GPU resources (disposeScene keeps the player's model) + drop stale orbs
 
-    while(scene.children.length > 0){ 
+    disposeScene(scene);
 
-        scene.remove(scene.children[0]); 
-
-    }
+    treats.length = 0;
 
 
 
@@ -288,13 +355,11 @@ function loadWorld() {
 
 
 
-    // Clear the scene
+    // free the old scene's GPU resources (disposeScene keeps the player's model) + drop stale orbs
 
-    while(scene.children.length > 0){ 
+    disposeScene(scene);
 
-        scene.remove(scene.children[0]); 
-
-    }
+    treats.length = 0;
 
 
 
@@ -334,7 +399,7 @@ const touch = initTouchControls({
     keys,
     interact,
     attack,
-    sniff: () => AudioSys.sniff(),
+    sniff: doSniff,
 });
 
 const btnStart = document.getElementById('btn-start');
@@ -368,6 +433,19 @@ function animate() {
     requestAnimationFrame(animate);
 
     const dt = clock.getDelta();
+
+    elapsed += dt;
+
+    updateVFX(dt);
+
+    if (worldData.update) worldData.update(elapsed);
+
+    // highlight the nearest beggable human (gold emissive tell)
+    {
+        let _nh = null, _nd = 6;
+        for (const e of entities) { if (e instanceof Human) { const d = player.group.position.distanceTo(e.mesh.position); if (d < _nd) { _nd = d; _nh = e; } } }
+        if (highlighted !== _nh) { setGlow(highlighted, false); setGlow(_nh, true); highlighted = _nh; }
+    }
 
 
 
@@ -404,6 +482,8 @@ function animate() {
         if(player.group.position.distanceTo(t.position) < 2 * player.size) {
 
             player.grow(t.userData.value);
+
+            burst(t.position.clone(), t.userData.type === 'essence' ? 0x39d353 : 0xffd23f, 16, 5.5);
 
             scene.remove(t);
 
@@ -475,15 +555,41 @@ function animate() {
 
         const offset = new THREE.Vector3(0, 6 * player.size, -10 * player.size).applyMatrix4(player.group.matrixWorld);
 
-        camera.position.lerp(offset, 0.1);
+        // framerate-independent smoothing (was a fixed 0.1 lerp, which sped up at high FPS)
+
+        camera.position.lerp(offset, 1 - Math.exp(-9 * dt));
 
         camera.lookAt(player.group.position.clone().add(new THREE.Vector3(0,2,0)));
+
+        // subtle FOV kick while sprinting for a sense of speed
+
+        const targetFov = keys.shift ? 66 : 60;
+
+        camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-6 * dt));
+
+        camera.updateProjectionMatrix();
+
+    }
+
+    // trauma-based screen shake (squared falloff = punchy), applied after framing
+
+    if (trauma > 0) {
+
+        const s = trauma * trauma * 0.6;
+
+        camera.position.x += (Math.random() - 0.5) * s;
+
+        camera.position.y += (Math.random() - 0.5) * s;
+
+        camera.position.z += (Math.random() - 0.5) * s;
+
+        trauma = Math.max(0, trauma - dt * 1.8);
 
     }
 
 
 
-    renderer.render(scene, camera);
+    outline.render(scene, camera);
 
 }
 
