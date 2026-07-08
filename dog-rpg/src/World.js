@@ -60,21 +60,24 @@ export function createWorld(scene) {
     const houseEntryColliders = [];
 
     // --- 1. ATMOSPHERE & LIGHTING ---
-    const sky = new Sky();
-    sky.scale.setScalar(450000);
-    scene.add(sky);
-    noOutline(sky.material);   // never ink-outline the giant sky box
-
-    const sun = new THREE.Vector3();
-
-    const effectController = {
-        turbidity: 4,
-        rayleigh: 3,
-        mieCoefficient: 0.005,
-        mieDirectionalG: 0.8,
-        elevation: 28,
-        azimuth: 135,
-    };
+    // gradient sky dome (view-based, far-plane pinned) replaces the washed physical sky.
+    const HORIZON = new THREE.Color(0xf3ead9);
+    const ZENITH = new THREE.Color(0x6ba0dd);
+    const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(58), THREE.MathUtils.degToRad(135));
+    const skyMat = new THREE.ShaderMaterial({
+        side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false, toneMapped: false,
+        uniforms: {
+            uZenith: { value: ZENITH }, uHorizon: { value: HORIZON },
+            uSunDir: { value: sunDir.clone() }, uSunCol: { value: new THREE.Color(0xfff2d6) },
+        },
+        vertexShader: `varying vec3 vW; void main(){ vec4 wp = modelMatrix * vec4(position,1.0); vW = wp.xyz; vec4 p = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_Position = p.xyww; }`,
+        fragmentShader: `varying vec3 vW; uniform vec3 uZenith,uHorizon,uSunCol,uSunDir; void main(){ vec3 d = normalize(vW - cameraPosition); float h = clamp(d.y * 1.3 + 0.08, 0.0, 1.0); vec3 c = mix(uHorizon, uZenith, pow(h, 0.55)); float s = max(dot(d, normalize(uSunDir)), 0.0); c += uSunCol * (pow(s, 260.0) + pow(s, 8.0) * 0.22); gl_FragColor = vec4(c, 1.0); }`,
+    });
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(600, 24, 16), skyMat);
+    dome.frustumCulled = false;
+    dome.renderOrder = -1;
+    noOutline(skyMat);
+    scene.add(dome);
 
     // hemisphere fill (sky/ground bounce) instead of flat ambient — stops toon
     // shadow bands from going dead grey and adds free color grading.
@@ -82,7 +85,7 @@ export function createWorld(scene) {
     scene.add(hemiLight);
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-    dirLight.position.set(100, 150, 50);
+    dirLight.position.copy(sunDir).multiplyScalar(150);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 2048;
     dirLight.shadow.mapSize.height = 2048;
@@ -97,24 +100,7 @@ export function createWorld(scene) {
     dirLight.shadow.radius = 3.5;
     scene.add(dirLight);
 
-    function updateSky() {
-        const uniforms = sky.material.uniforms;
-        uniforms['turbidity'].value = effectController.turbidity;
-        uniforms['rayleigh'].value = effectController.rayleigh;
-        uniforms['mieCoefficient'].value = effectController.mieCoefficient;
-        uniforms['mieDirectionalG'].value = effectController.mieDirectionalG;
-
-        const phi = THREE.MathUtils.degToRad(90 - effectController.elevation);
-        const theta = THREE.MathUtils.degToRad(effectController.azimuth);
-
-        sun.setFromSphericalCoords(1, phi, theta);
-
-        uniforms['sunPosition'].value.copy(sun);
-        
-        dirLight.position.copy(sun).multiplyScalar(150);
-    }
-
-    updateSky();
+    // (sun direction is fixed above; the dome and dirLight both use sunDir)
 
     // stylized drifting clouds (cheap camera-facing billboards, fog-exempt, no outline)
     function makeCloudTexture() {
@@ -455,7 +441,7 @@ export function createWorld(scene) {
     }
 
     // atmosphere + one-shot cel conversion of everything built above
-    scene.fog = new THREE.FogExp2(0xc6dcee, 0.0058);
+    scene.fog = new THREE.FogExp2(0xf3ead9, 0.0055);
     toonify(scene);
     noOutline(floor.material);          // don't outline the 500u ground plane
     noOutline(grassField.material);     // don't outline 8000 grass instances
