@@ -408,6 +408,12 @@ if(btnStart) {
 
         document.getElementById('start-screen').style.display = 'none';
 
+        // capture the player's chosen dog name -> HUD
+        const _nm = (document.getElementById('dog-name')?.value || '').trim().slice(0, 14);
+        player.dogName = _nm || 'Stray';
+        const _lvl = document.getElementById('level-display');
+        if (_lvl) _lvl.innerText = `Lvl 1 ${player.dogName}`;
+
         touch.show();   // shows only on touch devices; audio user-gesture already satisfied
 
         AudioSys.init();

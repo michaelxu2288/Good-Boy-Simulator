@@ -66,7 +66,7 @@ export class Player {
         // xp bar shows progress within the current level (100 xp/level), matching the
         // level counter below (was /1000, so the bar desynced from levels).
         document.getElementById('xp-bar').style.width = (this.xp % 100) + '%';
-        document.getElementById('level-display').innerText = `Lvl ${Math.floor(this.xp/100)+1} Beast`;
+        document.getElementById('level-display').innerText = `Lvl ${Math.floor(this.xp/100)+1} ${this.dogName || 'Beast'}`;
         AudioSys.powerup();
     }
 

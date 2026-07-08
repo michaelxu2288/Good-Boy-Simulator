@@ -1,3 +1,8 @@
+/* start-screen title-card type: rounded storybook display + rounded readable body.
+   deliberate pairing for the cel-shaded dog game; apple hand fonts + cursive fall back
+   so it still reads hand-made offline. */
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito:wght@400;600;700;800&display=swap');
+
 html, body {
   margin: 0;
   height: 100%;
@@ -56,20 +61,293 @@ canvas { touch-action: none; }
   font-size: 14px;
 }
 
+/* =====================================================================
+   START SCREEN — "Maple Street title card"
+   A storybook title card of the game world: afternoon sky over a warm
+   cream horizon with a lawn band at the bottom. Palette lifted straight
+   from the in-game cel art (sky #6ba0dd, cream horizon #f3ead9, toon
+   grass, ink outlines) with gold reserved for the primary CTA the same
+   way treats are the reward in-game. Scoped so nothing here leaks onto
+   the in-game HUD or the .tbtn touch buttons.
+   ===================================================================== */
 #start-screen {
-  position: absolute; top:0; left:0; width:100%; height:100%;
-  background: rgba(0,0,0,0.85);
-  display: flex; flex-direction: column;
-  justify-content: center; align-items: center;
-  color: white; z-index: 20;
+  --sky-hi:   #9cc6ee;
+  --sky:      #6ba0dd;   /* game sky */
+  --horizon:  #f3ead9;   /* game cream horizon */
+  --grass:    #7bb24a;
+  --grass-dk: #5f9436;
+  --cream:    #fbf3df;   /* warm paper panels */
+  --paper:    #fffefb;
+  --ink:      #2b2320;   /* warm near-black cel outline */
+  --ink-soft: #4d423b;
+  --treat:    #ffcf3f;   /* gold treat = primary action */
+  --treat-dk: #e8a91f;
+  --hydrant:  #e5502e;   /* reserved red accent, used sparingly */
+
+  position: absolute; inset: 0;
+  z-index: 20;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;                 /* horizontal centering */
+  overflow-y: auto;                    /* scroll on short screens instead of clipping */
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;                 /* overlay may scroll; game surface stays locked */
+  color: var(--ink);
+  font-family: 'Nunito', 'Chalkboard SE', -apple-system, 'Segoe UI', sans-serif;
+  /* afternoon sun + sky-to-horizon. representational scene gradient, not a decorative AI wash */
+  background:
+    radial-gradient(130% 85% at 84% 6%, rgba(255,245,214,0.9) 0%, rgba(255,245,214,0) 44%),
+    linear-gradient(180deg, var(--sky-hi) 0%, var(--sky) 30%, #bcd6ec 60%, var(--horizon) 100%);
+  padding:
+    max(env(safe-area-inset-top,    0px), 20px)
+    max(env(safe-area-inset-right,  0px), 20px)
+    max(env(safe-area-inset-bottom, 0px), 20px)
+    max(env(safe-area-inset-left,   0px), 20px);
 }
-button {
-  padding: 20px 40px;
+
+/* the neighborhood lawn: a solid toon grass band with a gentle hill edge */
+#start-screen::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 26%;
+  background: linear-gradient(180deg, var(--grass) 0%, var(--grass-dk) 100%);
+  border-top: 4px solid var(--ink);
+  border-radius: 58% 42% 0 0 / 54px 38px 0 0;
+  z-index: -1;                         /* above the sky, behind the menu */
+  pointer-events: none;
+}
+
+#start-screen .menu {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 380px;
+  margin: auto 0;                      /* vertical centering that stays scroll-safe */
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+/* ---- title block: hand-placed, tilted, asymmetric (not a dead-center hero) ---- */
+#start-screen .titleblock { padding-left: 2px; }
+
+#start-screen .paw {
+  width: 44px; height: 44px;
+  display: block;
+  margin: 0 0 -4px 2px;
+  transform: rotate(-12deg);
+  transform-origin: 60% 80%;
+}
+#start-screen .paw ellipse,
+#start-screen .paw path {
+  fill: var(--treat);
+  stroke: var(--ink);
+  stroke-width: 3;
+  paint-order: stroke;
+}
+
+#game-title {
+  margin: 0;
+  font-family: 'Baloo 2', 'Chalkboard SE', 'Marker Felt', 'Comic Sans MS', cursive;
+  font-weight: 800;
+  font-size: clamp(34px, 11vw, 52px);
+  line-height: 0.94;
+  letter-spacing: 0.5px;
+  color: var(--horizon);               /* cream fill... */
+  -webkit-text-stroke: 4px var(--ink); /* ...over a thick ink outline = cel logo */
+  paint-order: stroke fill;
+  transform: rotate(-3deg);
+  filter: drop-shadow(3px 4px 0 rgba(43,35,32,0.32));
+  word-break: keep-all;
+}
+
+#tagline {
+  margin: 12px 2px 0;
+  max-width: 22em;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.36;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+/* ---- shared panel look: cream card, ink border, hard cel offset (no glow) ---- */
+#start-screen .panel {
+  background: var(--cream);
+  border: 3px solid var(--ink);
+  border-radius: 16px;
+  box-shadow: 5px 6px 0 rgba(43,35,32,0.85);
+  padding: 14px 16px;
+}
+
+/* ---- name your dog: styled like a collar name-tag with a grommet ---- */
+#start-screen .nametag {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 18px;
+}
+#start-screen .nametag::before {          /* the collar tag ring */
+  content: "";
+  position: absolute;
+  top: -9px; left: 24px;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: var(--cream);
+  border: 3px solid var(--ink);
+}
+#start-screen .nametag-label {
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+#dog-name {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: 'Baloo 2', 'Chalkboard SE', 'Comic Sans MS', cursive;
+  font-weight: 700;
+  font-size: 20px;                        /* >=16px so iOS Safari won't zoom on focus */
+  color: var(--ink);
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 12px;
+  padding: 11px 14px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+#dog-name::placeholder { color: #b9ad9c; font-style: italic; }
+#dog-name:focus {
+  border-color: var(--treat-dk);
+  box-shadow: 3px 3px 0 var(--treat);
+}
+
+/* ---- how to play ---- */
+#start-screen .howto-title {
+  margin: 0 0 6px;
+  font-family: 'Baloo 2', 'Chalkboard SE', 'Comic Sans MS', cursive;
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--ink);
+}
+#start-screen .howto-blurb {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+#start-screen .controls-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;       /* keys column aligns across every row */
+  gap: 9px 12px;
+  align-items: center;
+}
+#start-screen .controls-list li { display: contents; }
+#start-screen .keys { display: inline-flex; gap: 4px; }
+#start-screen kbd {
+  font-family: 'Nunito', ui-monospace, monospace;
+  font-weight: 800;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink);
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  box-shadow: 0 2px 0 var(--ink);        /* keycap depth (offset, not glow) */
+  padding: 4px 7px;
+  min-width: 12px;
+  text-align: center;
+}
+#start-screen kbd.kbd-wide { letter-spacing: 0.3px; }
+#start-screen .act {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+#start-screen .act em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+/* ---- primary CTA: a gold "treat" button, ink-outlined, chunky and pressable ---- */
+#btn-start {
+  align-self: center;
+  margin-top: 2px;
+  min-width: 210px;
+  padding: 15px 34px;
+  font-family: 'Baloo 2', 'Chalkboard SE', 'Comic Sans MS', cursive;
+  font-weight: 800;
   font-size: 24px;
+  letter-spacing: 0.5px;
+  color: var(--ink);
+  background: var(--treat);
+  border: 3px solid var(--ink);
+  border-radius: 16px;
+  box-shadow: 0 6px 0 var(--treat-dk), 0 8px 0 var(--ink);  /* stacked toon button edge */
   cursor: pointer;
-  background: #FFD700;
-  border: none;
-  font-weight: bold;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: transform .06s ease, box-shadow .06s ease, background-color .1s ease;
+}
+#btn-start:hover { background: #ffd856; }
+#btn-start:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 var(--treat-dk), 0 4px 0 var(--ink);
+}
+@media (hover: none) {
+  #btn-start:hover { background: var(--treat); }   /* no sticky hover tint on touch */
+}
+
+/* ---- footer + version stamp ---- */
+#start-screen .footer {
+  margin: 4px 0 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+#start-screen .footer a {
+  color: var(--ink);
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+}
+#version-tag {
+  position: absolute;
+  top: max(env(safe-area-inset-top, 0px), 10px);
+  right: max(env(safe-area-inset-right, 0px), 12px);
+  z-index: 2;
+  font-family: 'Baloo 2', 'Chalkboard SE', 'Comic Sans MS', cursive;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--cream);
+  background: var(--hydrant);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  padding: 2px 8px;
+  transform: rotate(4deg);
+  box-shadow: 2px 2px 0 rgba(43,35,32,0.5);
+  pointer-events: none;
+}
+
+/* one gentle idle wag on the paw only; off when the user asks for less motion */
+@media (prefers-reduced-motion: no-preference) {
+  #start-screen .paw { animation: paw-wag 2.8s ease-in-out infinite; }
+  @keyframes paw-wag {
+    0%, 100% { transform: rotate(-12deg); }
+    50%      { transform: rotate(-3deg); }
+  }
 }
 
 /* ===== mobile touch controls ===== */
