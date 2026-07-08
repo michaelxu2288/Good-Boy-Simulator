@@ -24,6 +24,32 @@ function _gableRoof(w, d, rh) {
     g.computeVertexNormals();
     return g;
 }
+function makeBlade() {
+    const h = 0.85, bw = 0.05, bend = 0.28;
+    const m = h * 0.5, mb = bend * 0.4, mw = bw * 0.55;
+    const P = [
+        -bw, 0, 0, bw, 0, 0, mw, m, mb,
+        -bw, 0, 0, mw, m, mb, -mw, m, mb,
+        -mw, m, mb, mw, m, mb, 0, h, bend,
+    ];
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+    const cols = [];
+    for (let i = 0; i < P.length; i += 3) { const ao = 0.62 + (P[i + 1] / h) * 0.38; cols.push(ao, ao, ao); }
+    g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+    g.computeVertexNormals();
+    return g;
+}
+function makeTuft() {
+    const blades = [];
+    for (let i = 0; i < 3; i++) {
+        const b = makeBlade();
+        b.rotateY(i * 2.1 + Math.random() * 0.7);
+        b.rotateZ((Math.random() - 0.5) * 0.35);
+        blades.push(b);
+    }
+    return mergeGeometries(blades, false);
+}
 
 export function getTerrainHeightAt(x, z) {
     return Math.sin(x * 0.05) * Math.cos(z * 0.05) * 8;
@@ -190,9 +216,9 @@ export function createWorld(scene) {
 
 
     // --- 3. MASSIVE GRASS SYSTEM (InstancedMesh for Performance) ---
-    const grassCount = 8000;
-    const grassGeo = new THREE.ConeGeometry(0.15, 0.8, 3);
-    const grassMat = new THREE.MeshLambertMaterial({ color: 0x7ebf5a });
+    const grassCount = 11000;
+    const grassGeo = makeTuft();
+    const grassMat = new THREE.MeshToonMaterial({ color: 0x9ccb6f, vertexColors: true, gradientMap: TOON_RAMP, side: THREE.DoubleSide });
     const grassField = new THREE.InstancedMesh(grassGeo, grassMat, grassCount);
     
     const dummy = new THREE.Object3D();
