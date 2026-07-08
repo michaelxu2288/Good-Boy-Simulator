@@ -90,7 +90,7 @@ export class Human extends Entity {
                 this.state = 'IDLE';
             } else {
                 dir.normalize();
-                this.mesh.lookAt(this.target.x, 0, this.target.z);
+                this.mesh.lookAt(this.target.x, this.mesh.position.y, this.target.z);   // yaw only — y=0 tilted people on hills
                 this.mesh.position.add(dir.multiplyScalar(3 * dt));
             }
         }
@@ -120,9 +120,12 @@ export class DogNPC extends Entity {
         const clone = makeDogClone(color);
         if (clone) {
             clone.scale.setScalar(0.02);
-            clone.rotation.set(-Math.PI / 2, Math.PI, 0);   // stand upright + face the walk direction
+            clone.rotation.x = -Math.PI / 2;   // stand upright, exactly like the player dog
             clone.position.y = 0.1;
-            this.mesh.add(clone);
+            const wrap = new THREE.Group();    // spin the wrapper (clean vertical) for facing — avoids the Euler upside-down flip
+            wrap.rotation.y = Math.PI;
+            wrap.add(clone);
+            this.mesh.add(wrap);
             this.mesh.scale.setScalar(scale);
         } else {
             // fallback box dog if the GLB didn't load
@@ -154,7 +157,7 @@ export class DogNPC extends Entity {
         if(this.isHostile) {
             if(distToPlayer > 2 && distToPlayer < 30) {
                 const dir = new THREE.Vector3().subVectors(playerPos, this.mesh.position).normalize();
-                this.mesh.lookAt(playerPos.x, 0, playerPos.z);
+                this.mesh.lookAt(playerPos.x, this.mesh.position.y, playerPos.z);   // yaw only — y=0 pitched the dog nose-down into hills
                 this.mesh.position.add(dir.multiplyScalar(6 * dt));
             } else if (distToPlayer <= 2) {
                 this.attackTimer += dt;
@@ -172,7 +175,7 @@ export class DogNPC extends Entity {
                 const dir = new THREE.Vector3().subVectors(this.target, this.mesh.position);
                 if(dir.length() < 1) {
                     this.target.set((Math.random()-0.5)*300, 0, (Math.random()-0.5)*300);
-                    this.mesh.lookAt(this.target.x, 0, this.target.z);
+                    this.mesh.lookAt(this.target.x, this.mesh.position.y, this.target.z);   // yaw only — y=0 pitched the dog into the terrain
                 } else {
                     dir.normalize();
                     this.mesh.position.add(dir.multiplyScalar(4 * dt));
