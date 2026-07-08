@@ -19,12 +19,12 @@ export function createWorld(scene) {
     const sun = new THREE.Vector3();
 
     const effectController = {
-        turbidity: 5,
-        rayleigh: 2,
+        turbidity: 4,
+        rayleigh: 3,
         mieCoefficient: 0.005,
-        mieDirectionalG: 0.7,
-        elevation: 15,
-        azimuth: 180,
+        mieDirectionalG: 0.8,
+        elevation: 28,
+        azimuth: 135,
     };
 
     // hemisphere fill (sky/ground bounce) instead of flat ambient — stops toon
@@ -108,6 +108,22 @@ export function createWorld(scene) {
     }
     groundGeo.computeVertexNormals();
 
+    // per-vertex ground color variation: grass patches + dirt near roads + height tint
+    const gColors = [];
+    const gTmp = new THREE.Color();
+    const gp = groundGeo.attributes.position;
+    for (let i = 0; i < gp.count; i++) {
+        const vx = gp.getX(i), vy = gp.getY(i), h = gp.getZ(i);
+        if (Math.abs(vx) < 13 || Math.abs(vy) < 13) {
+            gTmp.setHex(0xa89066);                 // dirt shoulder near the roads
+        } else {
+            const n = Math.sin(vx * 0.13) * Math.cos(vy * 0.11) * 0.5 + 0.5; // 0..1 patchiness
+            gTmp.setHSL(0.30 - n * 0.05, 0.40 + n * 0.14, 0.52 + h * 0.012 + n * 0.06);
+        }
+        gColors.push(gTmp.r, gTmp.g, gTmp.b);
+    }
+    groundGeo.setAttribute('color', new THREE.Float32BufferAttribute(gColors, 3));
+
     const grassTexture = createGrassTexture();
     grassTexture.wrapS = THREE.RepeatWrapping;
     grassTexture.wrapT = THREE.RepeatWrapping;
@@ -131,21 +147,29 @@ export function createWorld(scene) {
     const grassField = new THREE.InstancedMesh(grassGeo, grassMat, grassCount);
     
     const dummy = new THREE.Object3D();
+    const gcol = new THREE.Color();
     for (let i = 0; i < grassCount; i++) {
         const x = (Math.random() - 0.5) * 400;
         const z = (Math.random() - 0.5) * 400;
         dummy.position.set(x, getTerrainHeightAt(x, z), z);
-        
-        // Don't put grass on roads (center area)
-        if(Math.abs(dummy.position.x) < 22 || Math.abs(dummy.position.z) < 22) continue;
 
-        dummy.scale.setScalar(0.5 + Math.random() * 0.5);
+        // hide grass on the roads (center strips) with a zero-scale instance
+        if(Math.abs(dummy.position.x) < 22 || Math.abs(dummy.position.z) < 22) {
+            dummy.scale.setScalar(0);
+            dummy.updateMatrix();
+            grassField.setMatrixAt(i, dummy.matrix);
+            continue;
+        }
+
+        dummy.scale.setScalar(0.5 + Math.random() * 0.6);
         dummy.rotation.y = Math.random() * Math.PI;
         dummy.rotation.x = (Math.random() - 0.5) * 0.2; // Random tilt
         dummy.updateMatrix();
         grassField.setMatrixAt(i, dummy.matrix);
+        grassField.setColorAt(i, gcol.setScalar(0.72 + Math.random() * 0.33)); // per-blade brightness variation
     }
     grassField.receiveShadow = true;
+    if (grassField.instanceColor) grassField.instanceColor.needsUpdate = true;
     scene.add(grassField);
 
     // --- 4. ROADS & SIDEWALKS ---
@@ -345,10 +369,11 @@ export function createWorld(scene) {
     }
 
     // atmosphere + one-shot cel conversion of everything built above
-    scene.fog = new THREE.FogExp2(0xcfe3f2, 0.0055);
+    scene.fog = new THREE.FogExp2(0xc6dcee, 0.0052);
     toonify(scene);
     noOutline(floor.material);          // don't outline the 500u ground plane
     noOutline(grassField.material);     // don't outline 8000 grass instances
+    floor.material.vertexColors = true; // use the per-vertex ground color variation
 
     // grass wind: sway blade tips via a per-instance-phased vertex offset (§13)
     const windUniform = { value: 0 };
