@@ -52,7 +52,14 @@ function makeTuft() {
 }
 
 export function getTerrainHeightAt(x, z) {
-    return Math.sin(x * 0.05) * Math.cos(z * 0.05) * 8;
+    // layered rolling hills; the town center is kept gentle so roads/houses stay sensible,
+    // opening up into bigger hills toward the edges.
+    const base = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 6;
+    const big = Math.sin(x * 0.019 + 0.6) * Math.cos(z * 0.022 - 0.4) * 14;
+    const detail = Math.sin(x * 0.13) * Math.cos(z * 0.11 + 1.1) * 2.2;
+    const r = Math.sqrt(x * x + z * z);
+    const openness = Math.min(1, Math.max(0, (r - 45) / 130));   // 0 at center, 1 far out
+    return base + (big + detail) * openness;
 }
 
 export function createWorld(scene) {
@@ -157,7 +164,7 @@ export function createWorld(scene) {
         return tex;
     }
 
-    const groundGeo = new THREE.PlaneGeometry(500, 500, 32, 32);
+    const groundGeo = new THREE.PlaneGeometry(500, 500, 128, 128);
     
     // Slight uneven terrain
     const posAttribute = groundGeo.attributes.position;
