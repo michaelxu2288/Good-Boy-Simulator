@@ -179,60 +179,58 @@ window.addEventListener('orientationchange', () => setTimeout(onViewportResize, 
 
 // --- GAMEPLAY LOGIC ---
 
-function interact() {
+const distXZ = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);   // horizontal distance so hills don't eat reach
 
-    let closest = null;
-
-    let dist = 10;
-
-    
-
-    entities.forEach(e => {
-
-        if(e instanceof Human) {
-
-            const d = player.group.position.distanceTo(e.mesh.position);
-
-            if(d < dist) { dist = d; closest = e; }
-
-        }
-
-    });
-
-
-
-    const box = document.getElementById('dialogue-box');
-
-    if(closest && dist < 6) {
-        AudioSys.speak(closest.storyText, closest.voice, closest.pitch, closest.rate);
-
-        player.group.rotation.x = -0.5; // Tilt up
-        setTimeout(() => player.group.rotation.x = 0, 500);
-
-        showToast(closest.introText, 3000);
-        
-        if(!closest.hasGivenTreat) {
-            closest.hasGivenTreat = true;
-            setTimeout(() => {
-                const t = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshStandardMaterial({color: 0xFFD700}));
-                t.position.copy(closest.mesh.position).add(new THREE.Vector3(0,2,0));
-                t.userData = { type: 'treat', value: 0.05 };
-                scene.add(t);
-                treats.push(t);
-                box.innerText += "\n(They dropped a treat!)";
-            }, 1000);
-        }
+function sniffProp(kind, prop) {
+    doSniff();
+    if (kind === 'hydrant') {
+        if (!prop.sniffed) { prop.sniffed = true; player.grow(0.02); showToast('You marked your territory! +size', 2200); }
+        else showToast('Sniff… another dog was here.', 1800);
+    } else if (kind === 'tree') {
+        showToast('Sniff sniff… smells like squirrels.', 1800);
     } else {
-        AudioSys.whine();
+        showToast('Someone lives here. Smells like dinner.', 1800);
     }
+}
 
+function interact() {
+    const p = player.group.position;
+    let best = null, bestD = Infinity;
+    for (const e of entities) {
+        if (!(e instanceof Human)) continue;
+        const d = distXZ(p, e.mesh.position);
+        if (d < 6 * player.size && d < bestD) { bestD = d; best = { kind: 'human', ent: e }; }
+    }
+    for (const it of (worldData.interactables || [])) {
+        const d = distXZ(p, it.position);
+        if (d < it.radius + 3.5 * player.size && d < bestD) { bestD = d; best = { kind: it.type, prop: it }; }
+    }
+    if (!best) { AudioSys.whine(); showToast('Nothing to sniff here…', 1200); return; }
+    if (best.kind !== 'human') return sniffProp(best.kind, best.prop);
+
+    const closest = best.ent;
+    const box = document.getElementById('dialogue-box');
+    AudioSys.speak(closest.storyText, closest.voice, closest.pitch, closest.rate);
+    if (player.tilt) { player.tilt.rotation.x = -0.5; setTimeout(() => { if (player.tilt) player.tilt.rotation.x = 0; }, 500); }  // beg tilt on the pivot (camera stays put)
+    showToast(closest.introText, 3000);
+    if (!closest.hasGivenTreat) {
+        closest.hasGivenTreat = true;
+        setTimeout(() => {
+            const t = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshStandardMaterial({ color: 0xFFD700 }));
+            t.position.copy(closest.mesh.position).add(new THREE.Vector3(0, 2, 0));
+            t.userData = { type: 'treat', value: 0.05 };
+            scene.add(t);
+            treats.push(t);
+            if (box) box.innerText += "\n(They dropped a treat!)";
+        }, 1000);
+    }
 }
 
 
 
 function attack() {
 
-    player.group.position.add(player.group.getWorldDirection(new THREE.Vector3()).multiplyScalar(1)); // Lunge
+    player.group.position.add(new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.group.rotation.y)); // lunge forward
 
     
 
@@ -240,7 +238,7 @@ function attack() {
 
         if(e instanceof DogNPC && !e.dead) {
 
-            if(player.group.position.distanceTo(e.mesh.position) < 4 * player.size) {
+            if(distXZ(player.group.position, e.mesh.position) < 4 * player.size) {
 
                 const dead = e.takeHit(10 * player.size);
 

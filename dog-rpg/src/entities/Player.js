@@ -25,10 +25,15 @@ export class Player {
                 }
             });
             toonify(this.model);   // cel-shade the dog to match the world
-            this.group.add(this.model);
+            this.tilt.add(this.model);
         });
 
         this.scene.add(this.group);
+
+        // inner pivot: bob/bank live here so they never leak into group.matrixWorld (camera stays stable)
+        this.tilt = new THREE.Group();
+        this.group.add(this.tilt);
+        this.bobAmt = 0; this.bank = 0; this.groundY = 0;
 
         // Stats
         this.hp = 100;
@@ -80,42 +85,41 @@ export class Player {
 
     update(dt, keys, wallColliders) {
         let isMoving = false;
-        let speed = keys.shift ? this.sprintSpeed : this.baseSpeed;
-        
+        const speed = keys.shift ? this.sprintSpeed : this.baseSpeed;
+
         // Rotation
-        const rotSpeed = 3;
-        if(keys.a) this.group.rotation.y += rotSpeed * dt;
-        if(keys.d) this.group.rotation.y -= rotSpeed * dt;
-        
-        // Movement
-        if(keys.w || keys.s) {
+        const turn = (keys.a ? 1 : 0) - (keys.d ? 1 : 0);
+        this.group.rotation.y += turn * 3 * dt;
+
+        // Movement with axis-separated wall-slide (retry X then Z when the combined step is
+        // blocked, so the dog slides along walls instead of dead-stopping).
+        if (keys.w || keys.s) {
             isMoving = true;
-            const dir = new THREE.Vector3(0,0,1).applyAxisAngle(new THREE.Vector3(0,1,0), this.group.rotation.y);
-            if(keys.s) dir.negate();
-            
-            const nextPos = this.group.position.clone().add(dir.multiplyScalar(speed * dt));
-            
-            // Collision Check
-            let collide = false;
-            const pBox = new THREE.Box3().setFromCenterAndSize(nextPos, new THREE.Vector3(1,2,1));
-            for(let w of wallColliders) {
-                if(pBox.intersectsBox(w)) { collide = true; break; }
-            }
-            
-            if(!collide) {
-                this.group.position.copy(nextPos);
-            }
+            const dir = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.group.rotation.y);
+            if (keys.s) dir.negate();
+            const step = dir.multiplyScalar(speed * dt);
+            const tryAxis = (dx, dz) => {
+                const np = this.group.position.clone(); np.x += dx; np.z += dz;
+                const b = new THREE.Box3().setFromCenterAndSize(np, new THREE.Vector3(1, 2, 1));
+                for (const w of wallColliders) if (b.intersectsBox(w)) return false;
+                this.group.position.copy(np); return true;
+            };
+            if (!tryAxis(step.x, step.z)) { tryAxis(step.x, 0); tryAxis(0, step.z); }
         }
 
-        // Terrain Following
-        this.group.position.y = getTerrainHeightAt(this.group.position.x, this.group.position.z);
+        // Smoothed terrain follow (damps the high-freq hill detail so the dog + camera don't jitter)
+        const targetY = getTerrainHeightAt(this.group.position.x, this.group.position.z);
+        this.groundY += (targetY - this.groundY) * (1 - Math.exp(-14 * dt));
+        this.group.position.y = this.groundY;
 
-        // procedural bounce so the (un-rigged) dog looks alive while moving — advances a
-        // gait timer and hops the model on |sin|. faster + higher while sprinting.
-        if (this.model) {
-            if (isMoving) this.walkTimer += dt * (keys.shift ? 16 : 11);
-            const bob = isMoving ? Math.abs(Math.sin(this.walkTimer)) * 0.22 * this.size : 0;
-            this.model.position.y = 0.1 + bob;
+        // gait + bank, eased, on the tilt pivot (never on group -> camera unaffected)
+        this.bank += ((isMoving ? -turn * 0.28 : 0) - this.bank) * (1 - Math.exp(-8 * dt));
+        this.bobAmt += ((isMoving ? 1 : 0) - this.bobAmt) * (1 - Math.exp(-10 * dt));
+        if (isMoving) this.walkTimer += dt * (keys.shift ? 15 : 10);
+        const gait = 0.5 - 0.5 * Math.cos(this.walkTimer);
+        if (this.tilt) {
+            this.tilt.position.y = gait * 0.16 * this.size * this.bobAmt;
+            this.tilt.rotation.z = this.bank;
         }
     }
 }

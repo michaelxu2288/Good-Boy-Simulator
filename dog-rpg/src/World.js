@@ -364,6 +364,7 @@ export function createWorld(scene) {
 
     const spawnedObjects = [];
 
+    const interactables = [];
     for(let i=0; i<125; i++) {
         let x, z, dist, validPosition;
         
@@ -416,6 +417,7 @@ export function createWorld(scene) {
             doorPosition.y = getTerrainHeightAt(doorPosition.x, doorPosition.z) + 2;
             doorCollider.setFromCenterAndSize(doorPosition, new THREE.Vector3(2.5, 12, 2.5));
             houseEntryColliders.push(doorCollider);
+            interactables.push({ type: 'house', position: doorPosition.clone(), radius: 3, object: houseGroup });
 
         } else if (type > 0.1) {
             // -- TREE --
@@ -440,6 +442,7 @@ export function createWorld(scene) {
             treeGroup.scale.setScalar(1 + Math.random() * 0.5);
             scene.add(treeGroup);
             wallColliders.push(new THREE.Box3().setFromObject(trunk));
+            interactables.push({ type: 'tree', position: new THREE.Vector3(x, y, z), radius: 2.5 * treeGroup.scale.x, object: treeGroup });
         } else {
             // -- FIRE HYDRANT --
             spawnedObjects.push({ x, z, radius: 2 });
@@ -448,6 +451,8 @@ export function createWorld(scene) {
             hydrant.position.set(x, y + 0.5, z);
             hydrant.castShadow = true;
             scene.add(hydrant);
+            wallColliders.push(new THREE.Box3().setFromObject(hydrant));   // was missing — dog phased through hydrants
+            interactables.push({ type: 'hydrant', position: hydrant.position.clone(), radius: 1.5, object: hydrant });
         }
     }
 
@@ -475,7 +480,7 @@ export function createWorld(scene) {
 
     // live per-frame handle (§05): lets the loop drive wind + cloud drift (and later day/night).
     return {
-        wallColliders, houseEntryColliders,
+        wallColliders, houseEntryColliders, interactables,
         update(t) {
             windUniform.value = t;
             for (const c of clouds) c.position.x = ((c.userData.baseX + t * c.userData.driftX + 190) % 380) - 190;
