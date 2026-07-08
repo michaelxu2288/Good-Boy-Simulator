@@ -128,10 +128,11 @@ export function createWorld(scene) {
         const cm = new THREE.SpriteMaterial({ map: cloudTex, transparent: true, opacity: 0.9, depthWrite: false, fog: false });
         cm.userData.outlineParameters = { visible: false };
         const s = new THREE.Sprite(cm);
-        s.userData.baseX = (Math.random() - 0.5) * 560;
+        s.frustumCulled = false;
+        s.userData.baseX = (Math.random() - 0.5) * 380;
         s.userData.driftX = 1.2 + Math.random() * 2.2;
-        s.position.set(s.userData.baseX, 60 + Math.random() * 38, (Math.random() - 0.5) * 560);
-        const sc = 60 + Math.random() * 60; s.scale.set(sc, sc * 0.6, 1);
+        s.position.set(s.userData.baseX, 58 + Math.random() * 34, (Math.random() - 0.5) * 380);
+        const sc = 55 + Math.random() * 55; s.scale.set(sc, sc * 0.6, 1);
         scene.add(s); clouds.push(s);
     }
 
@@ -404,13 +405,16 @@ export function createWorld(scene) {
             houseGroup.updateMatrixWorld(true);
 
             scene.add(houseGroup);
-            wallColliders.push(new THREE.Box3().setFromObject(houseGroup.userData.bodyMesh));
-            
-            // Create a collider for the door
+            const wallBox = new THREE.Box3().setFromObject(houseGroup.userData.bodyMesh);
+            wallBox.min.y -= 8;   // extend down so downhill approaches on the new hills still collide
+            wallColliders.push(wallBox);
+
+            // door trigger: sit it on the door's OWN ground (hills) + tall enough to span slope
             const doorCollider = new THREE.Box3();
             const doorPosition = new THREE.Vector3(0, 2, d/2);
             doorPosition.applyMatrix4(houseGroup.matrixWorld);
-            doorCollider.setFromCenterAndSize(doorPosition, new THREE.Vector3(2, 4, 2));
+            doorPosition.y = getTerrainHeightAt(doorPosition.x, doorPosition.z) + 2;
+            doorCollider.setFromCenterAndSize(doorPosition, new THREE.Vector3(2.5, 12, 2.5));
             houseEntryColliders.push(doorCollider);
 
         } else if (type > 0.1) {
@@ -474,7 +478,7 @@ export function createWorld(scene) {
         wallColliders, houseEntryColliders,
         update(t) {
             windUniform.value = t;
-            for (const c of clouds) c.position.x = ((c.userData.baseX + t * c.userData.driftX + 280) % 560) - 280;
+            for (const c of clouds) c.position.x = ((c.userData.baseX + t * c.userData.driftX + 190) % 380) - 190;
         },
     };
 }

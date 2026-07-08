@@ -14,7 +14,7 @@ import { initVFX, updateVFX, burst } from './vfx.js';
 
 import { showToast } from './ui.js';
 import { TOON_RAMP } from './materials.js';
-import { preloadDog } from './dogAsset.js';
+import { preloadDog, DOG_TEXTURES } from './dogAsset.js';
 
 
 
@@ -287,7 +287,7 @@ function disposeScene(root) {
             for (const m of mats) {
                 for (const key in m) {
                     const val = m[key];
-                    if (val && val.isTexture && val !== TOON_RAMP) val.dispose();  // keep the shared toon ramp alive
+                    if (val && val.isTexture && val !== TOON_RAMP && !DOG_TEXTURES.has(val)) val.dispose();  // keep shared toon ramp + dog proto textures
                 }
                 m.dispose();
             }
