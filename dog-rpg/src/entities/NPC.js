@@ -183,13 +183,37 @@ export class DogNPC extends Entity {
         this.attackTimer = 0;
         this.fireTimer = Math.random() * (diff.fireInterval || 1);   // desync gun volleys
         this.bobPhase = Math.random() * 6;
-        if (this.isFly) {   // flying blue dog: hovers, spins when idle, dives when hostile
-            this.hoverY = 4 + Math.random() * 4;
+        if (this.isFly) {   // flying blue dog: hovers high, spins + flaps when idle, dives to attack
+            this.hoverY = 15 + Math.random() * 8;   // way up in the sky
             this._flyY = this.hoverY;
             this.mesh.position.y = this.hoverY;
             this.spinPhase = Math.random() * Math.PI * 2;
+            this._wingPhase = Math.random() * Math.PI * 2;
+            if (this._wrap) this._buildWings(this._wrap);
         }
         if (clone && diff.evilOnSpawn) this.setEvil(true);   // hard: born evil
+    }
+
+    // white flapping wings for the fly dog: a flat feathered silhouette on each shoulder, on a
+    // pivot so rotation.z beats it up/down. built on the wrap so it scales with the dog.
+    _buildWings(wrap) {
+        // unlit white so the wings always read WHITE regardless of angle/lighting (the ink
+        // outline still gives them cel edges). angled MeshStandard wings went dark green from
+        // the ground-bounce light.
+        const wingMat = new THREE.MeshBasicMaterial({ color: 0xf6f7ff, side: THREE.DoubleSide });
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+            0, 0, 0.35,  1.6, 0, 0.55,  1.7, 0, -0.35,
+            0, 0, 0.35,  1.7, 0, -0.35, 0, 0, -0.45,
+            1.6, 0, 0.55, 2.5, 0, 0.15, 1.7, 0, -0.35,
+        ]), 3));
+        geo.computeVertexNormals();
+        const rWing = new THREE.Mesh(geo, wingMat); rWing.castShadow = true;
+        const lWing = new THREE.Mesh(geo, wingMat); lWing.castShadow = true; lWing.scale.x = -1;   // mirror
+        const rPivot = new THREE.Group(); rPivot.position.set(0.26, 1.75, 0.05); rPivot.add(rWing);
+        const lPivot = new THREE.Group(); lPivot.position.set(-0.26, 1.75, 0.05); lPivot.add(lWing);
+        wrap.add(rPivot, lPivot);
+        this._wingR = rPivot; this._wingL = lPivot;
     }
 
     // detailed cel-friendly rifle built from primitives, mounted on the dog's shoulder pointing
@@ -344,30 +368,30 @@ export class DogNPC extends Entity {
     // ground dogs. y is driven by a smoothed base height (_flyY) plus a hover bob (set, not added).
     _updateFly(dt, playerPos, playerClass, grace, d) {
         const distToPlayer = this.mesh.position.distanceTo(playerPos);
-        const sightRange = Math.max(d.aggroRange, 22);
+        const sightRange = Math.max(d.aggroRange, 38);   // generous so they spot you from high up and dive
         if (grace) this.isHostile = false;
         else if (d.chargeOnSight && !this.isHostile && distToPlayer < sightRange) this.isHostile = true;
         else if (this.isHostile && (!d.chargeOnSight || distToPlayer > sightRange + 8)) this.isHostile = false;
 
         const groundY = getTerrainHeightAt(this.mesh.position.x, this.mesh.position.z);
-        const flySpeed = 3.4 * d.speedMul;   // noticeably slower than ground dogs (they chase at 6 * speedMul)
+        const flySpeed = 3.8 * d.speedMul;   // slower than ground dogs (they chase at 6 * speedMul)
 
         if (this.isHostile && !grace) {
             const targetY = Math.max(playerPos.y + 1.2, groundY + 1.5);
-            if (distToPlayer > 2.4) {                       // DIVE toward the player from any angle
+            if (distToPlayer > 2.4) {                       // DIVE down at the player from the sky
                 const dx = playerPos.x - this.mesh.position.x, dz = playerPos.z - this.mesh.position.z;
                 const dm = Math.hypot(dx, dz) || 1;
                 this.mesh.position.x += (dx / dm) * flySpeed * dt;
                 this.mesh.position.z += (dz / dm) * flySpeed * dt;
-                this._flyY += (targetY - this._flyY) * Math.min(1, 4 * dt);
+                this._flyY += (targetY - this._flyY) * Math.min(1, 5 * dt);   // commit the descent
                 faceSmooth(this.mesh, playerPos.x, playerPos.z, 8, dt);
             } else {                                        // ATTACK
                 faceSmooth(this.mesh, playerPos.x, playerPos.z, 10, dt);
                 this.attackTimer += dt;
                 if (this.attackTimer >= d.attackInterval) { playerClass.takeDamage(this.damage); AudioSys.hit(); this.attackTimer = 0; }
             }
-        } else {                                            // IDLE: fast 360 spin + slow drift + hover
-            this.spinPhase += dt * 5.5;
+        } else {                                            // IDLE: fast 360 spin + slow drift + climb back up high
+            this.spinPhase += dt * 14;
             this.mesh.rotation.y = this.spinPhase;
             const dx = this.target.x - this.mesh.position.x, dz = this.target.z - this.mesh.position.z;
             const dm = Math.hypot(dx, dz);
@@ -375,6 +399,12 @@ export class DogNPC extends Entity {
             else { this.mesh.position.x += (dx / dm) * 1.8 * dt; this.mesh.position.z += (dz / dm) * 1.8 * dt; }
             this._flyY += (groundY + this.hoverY - this._flyY) * Math.min(1, 2.5 * dt);
         }
+
+        // fast white wing flap (always)
+        this._wingPhase += dt * 22;
+        const flap = Math.sin(this._wingPhase) * 0.6 + 0.15;
+        if (this._wingR) this._wingR.rotation.z = flap;
+        if (this._wingL) this._wingL.rotation.z = -flap;
 
         // menace-pop scale lerp (shared with ground dogs)
         if (this._wrap && Math.abs(this.mesh.scale.x - this.targetScale) > 0.001) {
