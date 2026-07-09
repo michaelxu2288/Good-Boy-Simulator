@@ -105,10 +105,10 @@ function bindToggle(el, onChange) {
   };
 }
 
-export function initTouchControls({ keys, interact, attack, sniff }) {
+export function initTouchControls({ keys, interact, attack, sniff, jump }) {
   const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
   const root = document.getElementById('touch-controls');
-  if (!root) return { update() {}, show() {}, isTouch };
+  if (!root) return { update() {}, show() {}, biteCooldown() {}, isTouch };
 
   const joy = createJoystick(document.getElementById('stick-zone'));
 
@@ -116,6 +116,34 @@ export function initTouchControls({ keys, interact, attack, sniff }) {
   bindTap(document.getElementById('btn-bite'), () => attack());
   bindTap(document.getElementById('btn-beg'), () => interact());
   bindTap(document.getElementById('btn-sniff'), () => sniff());
+  const jumpBtn = document.getElementById('btn-jump');
+  if (jumpBtn && jump) bindTap(jumpBtn, () => jump());
+
+  // radial cooldown ring overlaid on the BITE button (mobile). driven by the game each bite.
+  const biteBtn = document.getElementById('btn-bite');
+  let ringCircle = null, ringAnim = null, RC = 0;
+  if (biteBtn) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('class', 'cd-ring');
+    svg.setAttribute('viewBox', '0 0 100 100');
+    ringCircle = document.createElementNS(NS, 'circle');
+    ringCircle.setAttribute('cx', '50'); ringCircle.setAttribute('cy', '50'); ringCircle.setAttribute('r', '46');
+    svg.appendChild(ringCircle);
+    biteBtn.appendChild(svg);
+    RC = 2 * Math.PI * 46;
+    ringCircle.style.strokeDasharray = RC;
+    ringCircle.style.strokeDashoffset = RC;   // empty when ready
+  }
+  function biteCooldown(sec) {
+    if (!ringCircle) return;
+    biteBtn.classList.add('cooling');
+    if (ringAnim) ringAnim.cancel();
+    // full ring -> empty over the cooldown (a shrinking countdown sweep)
+    ringAnim = ringCircle.animate([{ strokeDashoffset: 0 }, { strokeDashoffset: RC }], { duration: sec * 1000, easing: 'linear' });
+    ringCircle.style.strokeDashoffset = RC;
+    ringAnim.onfinish = () => biteBtn.classList.remove('cooling');
+  }
 
   // anti-stuck-key insurance: clear everything if the app is backgrounded mid-press
   const clearAll = () => {
@@ -150,5 +178,5 @@ export function initTouchControls({ keys, interact, attack, sniff }) {
     root.style.display = 'block';
   }
 
-  return { update, show, isTouch };
+  return { update, show, biteCooldown, isTouch };
 }

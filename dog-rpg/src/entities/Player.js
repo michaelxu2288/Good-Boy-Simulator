@@ -33,7 +33,8 @@ export class Player {
         // inner pivot: bob/bank live here so they never leak into group.matrixWorld (camera stays stable)
         this.tilt = new THREE.Group();
         this.group.add(this.tilt);
-        this.bobAmt = 0; this.bank = 0; this.groundY = 0;
+        this.bobAmt = 0; this.bank = 0;
+        this.vy = 0; this.grounded = true;   // jump physics (flat ground)
 
         // Stats
         this.hp = 100;
@@ -53,10 +54,17 @@ export class Player {
         this.sprintSpeed += amount;
     }
 
+    // normal-physics jump (only off the ground); gravity in update() brings it back down
+    jump() {
+        if (this.grounded) { this.vy = 14; this.grounded = false; }
+    }
+
     grow(amount) {
         this.size += amount;
-        this.maxHp += 20;
-        this.hp = this.maxHp;
+        this.maxHp += 15;
+        // partial heal on grow (was a full reset, which made every kill trivialize combat).
+        // a kill/treat now tops you up ~45% so hard stays tense but rewards aggression.
+        this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.45);
         this.xp += amount * 100;
         
         if (this.model) {
@@ -107,10 +115,13 @@ export class Player {
             if (!tryAxis(step.x, step.z)) { tryAxis(step.x, 0); tryAxis(0, step.z); }
         }
 
-        // Smoothed terrain follow (damps the high-freq hill detail so the dog + camera don't jitter)
-        const targetY = getTerrainHeightAt(this.group.position.x, this.group.position.z);
-        this.groundY += (targetY - this.groundY) * (1 - Math.exp(-14 * dt));
-        this.group.position.y = this.groundY;
+        // vertical physics: flat fixed ground + jump arc (gravity pulls back to ground level)
+        const groundLevel = getTerrainHeightAt(this.group.position.x, this.group.position.z);
+        this.vy -= 34 * dt;                                   // gravity
+        let ny = this.group.position.y + this.vy * dt;
+        if (ny <= groundLevel) { ny = groundLevel; this.vy = 0; this.grounded = true; }
+        else { this.grounded = false; }
+        this.group.position.y = ny;
 
         // gait + bank, eased, on the tilt pivot (never on group -> camera unaffected)
         this.bank += ((isMoving ? -turn * 0.28 : 0) - this.bank) * (1 - Math.exp(-8 * dt));

@@ -379,9 +379,25 @@ canvas { touch-action: none; }
   font-weight: bold;
   padding: 0;
   cursor: pointer;
+  position: relative;              /* anchor the radial cooldown ring */
 }
 .tbtn.pressed { background: rgba(255,215,0,0.55); }
 .tbtn-bite { border-color: #ff5555; }
+#btn-bite { grid-column: 2; }      /* keep BITE bottom-right in the cluster */
+
+/* radial bite-cooldown ring (mobile): a yellow arc that sweeps empty over the cooldown */
+.cd-ring {
+  position: absolute;
+  left: -3px; top: -3px;
+  width: calc(100% + 6px); height: calc(100% + 6px);
+  transform: rotate(-90deg);       /* start the sweep at 12 o'clock */
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .12s;
+}
+.tbtn.cooling .cd-ring { opacity: 1; }
+.cd-ring circle { fill: none; stroke: #ffd23f; stroke-width: 7; stroke-linecap: round; }
+.tbtn.cooling { background: rgba(0,0,0,0.62); color: rgba(255,255,255,0.4); }  /* dim while reloading */
 #btn-sprint.pressed { background: rgba(51,255,51,0.55); }  /* sprint toggle-on state */
 
 /* only show touch UI on coarse pointers; hide the desktop key legend there */

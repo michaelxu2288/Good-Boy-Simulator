@@ -52,14 +52,11 @@ function makeTuft() {
 }
 
 export function getTerrainHeightAt(x, z) {
-    // layered rolling hills; the town center is kept gentle so roads/houses stay sensible,
-    // opening up into bigger hills toward the edges.
-    const base = Math.sin(x * 0.05) * Math.cos(z * 0.05) * 6;
-    const big = Math.sin(x * 0.019 + 0.6) * Math.cos(z * 0.022 - 0.4) * 14;
-    const detail = Math.sin(x * 0.13) * Math.cos(z * 0.11 + 1.1) * 2.2;
-    const r = Math.sqrt(x * x + z * z);
-    const openness = Math.min(1, Math.max(0, (r - 45) / 130));   // 0 at center, 1 far out
-    return base + (big + detail) * openness;
+    // FLAT world (v1.13): elevation is fixed at 0 everywhere. the old rolling-hills height
+    // made terrain-follow janky (dogs sinking/floating, camera jitter) and fought the new
+    // jump physics. a fixed ground plane is the robust fix and everything (ground mesh, roads,
+    // grass, props, entities) is built from this one function, so returning 0 flattens it all.
+    return 0;
 }
 
 export function createWorld(scene) {

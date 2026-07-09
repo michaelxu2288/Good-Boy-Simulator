@@ -139,9 +139,10 @@ export class DogNPC extends Entity {
 
         const diff = getDifficulty();
         this.diff = diff;
-        const color = opts.gun ? 0xf2f2ee : pickDogFur();   // gun dogs are white
-        const scale = Math.min(2.6, (0.8 + Math.random() * 0.7) * (1 + diff.scaleBonus));
         this.isGun = !!opts.gun;
+        this.isFly = !!opts.fly;
+        const color = opts.gun ? 0xf2f2ee : (opts.fly ? 0x3a6fd6 : pickDogFur());   // gun dogs white, fly dogs blue
+        const scale = Math.min(2.6, (0.8 + Math.random() * 0.7) * (1 + diff.scaleBonus));
 
         const clone = makeDogClone(color);
         if (clone) {
@@ -154,8 +155,8 @@ export class DogNPC extends Entity {
             this.mesh.scale.setScalar(scale);
             this._wrap = wrap;
             this._furColor = color;
-            // gun dogs: strip the brown labrador texture so the white body color actually shows
-            if (this.isGun) clone.traverse((o) => {
+            // gun/fly dogs: strip the brown labrador texture so the solid body color (white/blue) shows
+            if (this.isGun || this.isFly) clone.traverse((o) => {
                 if (o.isMesh && o.material) { o.material.map = null; o.material.color.setHex(color); o.material.needsUpdate = true; }
             });
             this._eyes = this._buildEvilEyes(wrap);   // hidden until provoked
@@ -182,6 +183,12 @@ export class DogNPC extends Entity {
         this.attackTimer = 0;
         this.fireTimer = Math.random() * (diff.fireInterval || 1);   // desync gun volleys
         this.bobPhase = Math.random() * 6;
+        if (this.isFly) {   // flying blue dog: hovers, spins when idle, dives when hostile
+            this.hoverY = 4 + Math.random() * 4;
+            this._flyY = this.hoverY;
+            this.mesh.position.y = this.hoverY;
+            this.spinPhase = Math.random() * Math.PI * 2;
+        }
         if (clone && diff.evilOnSpawn) this.setEvil(true);   // hard: born evil
     }
 
@@ -245,9 +252,8 @@ export class DogNPC extends Entity {
         if (this._isEvil === on) return;
         this._isEvil = on;
         if (this._eyes) this._eyes.visible = on;
-        // gun dogs stay recognizably WHITE when evil (their menace reads through eyes + rifle);
-        // regular dogs darken to a bloody brown.
-        if (!this.isGun && this._wrap && this._wrap.children[0]) this._wrap.children[0].traverse((o) => {
+        // gun/fly dogs stay their solid body color when evil (white / blue); regular dogs darken to a bloody brown.
+        if (!this.isGun && !this.isFly && this._wrap && this._wrap.children[0]) this._wrap.children[0].traverse((o) => {
             if (!o.isMesh || !o.material || !o.material.color) return;
             if (on) {
                 o.material.color.set(this._furColor).lerp(new THREE.Color(0x3a0e0a), 0.5);
@@ -263,6 +269,7 @@ export class DogNPC extends Entity {
     update(dt, playerPos, playerClass, grace = false) {
         if(this.dead) return;
         const d = this.diff;
+        if (this.isFly) { this._updateFly(dt, playerPos, playerClass, grace, d); return; }
         const distToPlayer = this.mesh.position.distanceTo(playerPos);
 
         // startup grace: dogs mill about but won't aggro/charge/attack/fire yet
@@ -331,6 +338,52 @@ export class DogNPC extends Entity {
             this._wrap.rotation.z = Math.sin(this.bobPhase * 0.5) * 0.1 * d.gait * amp;    // side-to-side waddle
         }
         if (moving) this.mesh.position.y += Math.abs(Math.sin(this.bobPhase)) * 0.16 * this.scaleVal * d.gait;
+    }
+
+    // flying blue dog: hovers and spin-idles, then dives at the player in full 3D but slower than
+    // ground dogs. y is driven by a smoothed base height (_flyY) plus a hover bob (set, not added).
+    _updateFly(dt, playerPos, playerClass, grace, d) {
+        const distToPlayer = this.mesh.position.distanceTo(playerPos);
+        const sightRange = Math.max(d.aggroRange, 22);
+        if (grace) this.isHostile = false;
+        else if (d.chargeOnSight && !this.isHostile && distToPlayer < sightRange) this.isHostile = true;
+        else if (this.isHostile && (!d.chargeOnSight || distToPlayer > sightRange + 8)) this.isHostile = false;
+
+        const groundY = getTerrainHeightAt(this.mesh.position.x, this.mesh.position.z);
+        const flySpeed = 3.4 * d.speedMul;   // noticeably slower than ground dogs (they chase at 6 * speedMul)
+
+        if (this.isHostile && !grace) {
+            const targetY = Math.max(playerPos.y + 1.2, groundY + 1.5);
+            if (distToPlayer > 2.4) {                       // DIVE toward the player from any angle
+                const dx = playerPos.x - this.mesh.position.x, dz = playerPos.z - this.mesh.position.z;
+                const dm = Math.hypot(dx, dz) || 1;
+                this.mesh.position.x += (dx / dm) * flySpeed * dt;
+                this.mesh.position.z += (dz / dm) * flySpeed * dt;
+                this._flyY += (targetY - this._flyY) * Math.min(1, 4 * dt);
+                faceSmooth(this.mesh, playerPos.x, playerPos.z, 8, dt);
+            } else {                                        // ATTACK
+                faceSmooth(this.mesh, playerPos.x, playerPos.z, 10, dt);
+                this.attackTimer += dt;
+                if (this.attackTimer >= d.attackInterval) { playerClass.takeDamage(this.damage); AudioSys.hit(); this.attackTimer = 0; }
+            }
+        } else {                                            // IDLE: fast 360 spin + slow drift + hover
+            this.spinPhase += dt * 5.5;
+            this.mesh.rotation.y = this.spinPhase;
+            const dx = this.target.x - this.mesh.position.x, dz = this.target.z - this.mesh.position.z;
+            const dm = Math.hypot(dx, dz);
+            if (dm < 2) pickWander(this.target, this.mesh.position);
+            else { this.mesh.position.x += (dx / dm) * 1.8 * dt; this.mesh.position.z += (dz / dm) * 1.8 * dt; }
+            this._flyY += (groundY + this.hoverY - this._flyY) * Math.min(1, 2.5 * dt);
+        }
+
+        // menace-pop scale lerp (shared with ground dogs)
+        if (this._wrap && Math.abs(this.mesh.scale.x - this.targetScale) > 0.001) {
+            const s = this.mesh.scale.x + (this.targetScale - this.mesh.scale.x) * Math.min(1, 10 * dt);
+            this.mesh.scale.setScalar(s);
+        }
+        // hover bob as a per-frame offset (no accumulation)
+        this.bobPhase += dt * 3;
+        this.mesh.position.y = this._flyY + Math.sin(this.bobPhase) * 0.25;
     }
 
     takeHit(dmg) {

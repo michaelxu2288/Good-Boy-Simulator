@@ -63,6 +63,8 @@ let trauma = 0;
 function addTrauma(amount) { trauma = Math.min(1, trauma + amount); }
 let elapsed = 0;
 let graceTimer = 0;   // startup grace: dogs stay passive for a few seconds so you don't die on spawn
+const BITE_COOLDOWN = 0.67;   // seconds between bites (shown as a radial timer on the mobile BITE button)
+let biteCd = 0;
 initVFX(scene);
 initBullets(scene);   // persistent pooled projectiles for gun dogs (survives scene swaps)
 
@@ -115,6 +117,9 @@ function spawnEntities() {
     for (let i = 0; i < d.dogCount; i++) {
         entities.push(new DogNPC(scene, (Math.random() - 0.5) * 300, (Math.random() - 0.5) * 300, { gun: i < d.gunDogCount }));
     }
+    for (let i = 0; i < (d.flyDogCount || 0); i++) {
+        entities.push(new DogNPC(scene, (Math.random() - 0.5) * 300, (Math.random() - 0.5) * 300, { fly: true }));
+    }
 }
 
 const dogReady = preloadDog();   // spawn is deferred to the WAKE UP handler so difficulty is locked first
@@ -131,7 +136,9 @@ window.addEventListener('keydown', e => {
 
     if(e.code === 'KeyF') doSniff();
 
-    if(e.code === 'Space') interact();
+    if(e.code === 'Space') { e.preventDefault(); player.jump(); }   // Space now jumps
+
+    if(e.code === 'KeyE') interact();                               // beg/sniff moved to E
 
     if (e.key === 'p') {
 
@@ -226,6 +233,10 @@ function interact() {
 
 function attack() {
 
+    if (biteCd > 0) return;                       // on cooldown -> ignore the bite
+    biteCd = BITE_COOLDOWN;
+    touch.biteCooldown(BITE_COOLDOWN);            // start the radial timer on the mobile BITE button
+
     player.group.position.add(new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.group.rotation.y)); // lunge forward
 
     // jaw-clamp VFX: a toothy chomp snaps shut just ahead of the dog's snout on every bite
@@ -242,7 +253,7 @@ function attack() {
 
             if(distXZ(player.group.position, e.mesh.position) < 4 * player.size) {
 
-                const dead = e.takeHit(10 * player.size);
+                const dead = e.takeHit(15 * player.size);
 
                 AudioSys.bark();
 
@@ -403,6 +414,7 @@ const touch = initTouchControls({
     interact,
     attack,
     sniff: doSniff,
+    jump: () => player.jump(),
 });
 
 // difficulty selector on the start screen
@@ -476,6 +488,7 @@ function animate() {
 
     if (graceTimer > 0) graceTimer -= dt;
     const grace = graceTimer > 0;   // during grace, dogs don't aggro/charge/attack/fire
+    if (biteCd > 0) biteCd -= dt;   // bite cooldown
 
     entities.forEach(e => {
 
