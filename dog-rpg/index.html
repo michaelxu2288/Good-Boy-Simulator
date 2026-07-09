@@ -11,7 +11,7 @@
 </head>
 <body>
     <div id="start-screen">
-        <span id="version-tag">v1.11</span>
+        <span id="version-tag">v1.12</span>
 
         <div class="menu">
             <div class="titleblock">
@@ -31,6 +31,15 @@
                 <input id="dog-name" type="text" maxlength="14" placeholder="Rex"
                        autocomplete="off" autocapitalize="words" spellcheck="false"
                        enterkeyhint="done">
+            </div>
+
+            <div class="panel difficulty">
+                <h2 class="howto-title">Difficulty</h2>
+                <div class="diff-grid" role="radiogroup" aria-label="Difficulty">
+                    <button type="button" class="diff-btn selected" data-diff="easy"   role="radio" aria-checked="true"><span class="diff-name">Easy</span><span class="diff-sub">a gentle stroll</span></button>
+                    <button type="button" class="diff-btn"          data-diff="medium" role="radio" aria-checked="false"><span class="diff-name">Medium</span><span class="diff-sub">dogs hold a grudge</span></button>
+                    <button type="button" class="diff-btn"          data-diff="hard"   role="radio" aria-checked="false"><span class="diff-name">Hard</span><span class="diff-sub">the pack wants blood</span></button>
+                </div>
             </div>
 
             <div class="panel howto">

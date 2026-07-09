@@ -11,10 +11,14 @@ import { initTouchControls } from './TouchControls.js';
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 
 import { initVFX, updateVFX, burst } from './vfx.js';
+import { jawSnap } from './vfx.js';
+
+import { initBullets, updateBullets, resetBullets } from './Bullets.js';
 
 import { showToast } from './ui.js';
 import { TOON_RAMP } from './materials.js';
 import { preloadDog, DOG_TEXTURES } from './dogAsset.js';
+import { getDifficulty, setDifficulty, getDifficultyKey } from './difficulty.js';
 
 
 
@@ -59,6 +63,7 @@ let trauma = 0;
 function addTrauma(amount) { trauma = Math.min(1, trauma + amount); }
 let elapsed = 0;
 initVFX(scene);
+initBullets(scene);   // persistent pooled projectiles for gun dogs (survives scene swaps)
 
 // sniff = sound + a little scent puff (ties the new VFX to the interaction)
 function doSniff() {
@@ -102,26 +107,16 @@ const treats = [];
 
 
 function spawnEntities() {
-
-    for(let i=0; i<45; i++) {
-
-        const human = new Human(scene, (Math.random()-0.5)*300, (Math.random()-0.5)*300);
-
-        entities.push(human);
-
+    const d = getDifficulty();
+    for (let i = 0; i < d.humanCount; i++) {
+        entities.push(new Human(scene, (Math.random() - 0.5) * 300, (Math.random() - 0.5) * 300));
     }
-
-    for(let i=0; i<30; i++) {
-
-        const dog = new DogNPC(scene, (Math.random()-0.5)*300, (Math.random()-0.5)*300);
-
-        entities.push(dog);
-
+    for (let i = 0; i < d.dogCount; i++) {
+        entities.push(new DogNPC(scene, (Math.random() - 0.5) * 300, (Math.random() - 0.5) * 300, { gun: i < d.gunDogCount }));
     }
-
 }
 
-preloadDog().then(spawnEntities);   // wait for the dog model so NPC dogs spawn as clones, not boxes
+const dogReady = preloadDog();   // spawn is deferred to the WAKE UP handler so difficulty is locked first
 
 
 
@@ -232,7 +227,13 @@ function attack() {
 
     player.group.position.add(new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.group.rotation.y)); // lunge forward
 
-    
+    // jaw-clamp VFX: a toothy chomp snaps shut just ahead of the dog's snout on every bite
+    {
+        const fwd = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.group.rotation.y);
+        const jp = player.group.position.clone().add(fwd.multiplyScalar(2.0 * player.size));
+        jp.y += 1.6 * player.size;
+        jawSnap(jp, 0.95 * player.size, player.group.rotation.y);
+    }
 
     entities.forEach(e => {
 
@@ -278,6 +279,7 @@ function disposeScene(root) {
     for (let i = root.children.length - 1; i >= 0; i--) {
         const child = root.children[i];
         if (child === player.group) continue;
+        if (child.userData && child.userData.persistent) continue;   // keep the pooled-bullet group across swaps
         child.traverse((obj) => {
             if (obj.geometry) obj.geometry.dispose();
             if (obj.isLight && obj.shadow && obj.shadow.map) obj.shadow.map.dispose();
@@ -315,6 +317,7 @@ function loadApartment() {
 
     treats.length = 0;
     highlighted = null;
+    resetBullets();   // drop any in-flight shots so they don't cross the scene boundary
 
 
 
@@ -358,6 +361,7 @@ function loadWorld() {
 
     treats.length = 0;
     highlighted = null;
+    resetBullets();   // drop any in-flight shots so they don't cross the scene boundary
 
 
 
@@ -400,6 +404,14 @@ const touch = initTouchControls({
     sniff: doSniff,
 });
 
+// difficulty selector on the start screen
+(() => {
+    const btns = [...document.querySelectorAll('.diff-btn')];
+    const paint = (k) => btns.forEach((b) => { const on = b.dataset.diff === k; b.classList.toggle('selected', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
+    paint(getDifficultyKey());
+    btns.forEach((b) => b.addEventListener('click', () => { setDifficulty(b.dataset.diff); paint(b.dataset.diff); }));
+})();
+
 const btnStart = document.getElementById('btn-start');
 
 if(btnStart) {
@@ -413,6 +425,8 @@ if(btnStart) {
         player.dogName = _nm || 'Stray';
         const _lvl = document.getElementById('level-display');
         if (_lvl) _lvl.innerText = `Lvl 1 ${player.dogName}`;
+
+        dogReady.then(spawnEntities);   // spawn NPCs now that difficulty is locked
 
         touch.show();   // shows only on touch devices; audio user-gesture already satisfied
 
@@ -468,6 +482,9 @@ function animate() {
         else e.update(dt);
 
     });
+
+    // advance gun-dog projectiles + apply hits to the player
+    updateBullets(dt, player.group, player);
 
 
 

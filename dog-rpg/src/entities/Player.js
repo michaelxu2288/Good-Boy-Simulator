@@ -116,10 +116,12 @@ export class Player {
         this.bank += ((isMoving ? -turn * 0.28 : 0) - this.bank) * (1 - Math.exp(-8 * dt));
         this.bobAmt += ((isMoving ? 1 : 0) - this.bobAmt) * (1 - Math.exp(-10 * dt));
         if (isMoving) this.walkTimer += dt * (keys.shift ? 15 : 10);
-        const gait = 0.5 - 0.5 * Math.cos(this.walkTimer);
+        const gait = 0.5 - 0.5 * Math.cos(this.walkTimer);   // 0..1 bounce
         if (this.tilt) {
-            this.tilt.position.y = gait * 0.16 * this.size * this.bobAmt;
-            this.tilt.rotation.z = this.bank;
+            // exaggerated stride: taller bob + a fore/aft rock + a waddle roll layered on the turn bank
+            this.tilt.position.y = gait * 0.26 * this.size * this.bobAmt;
+            this.tilt.rotation.x = Math.sin(this.walkTimer) * 0.14 * this.bobAmt;              // rock nose down on the push
+            this.tilt.rotation.z = this.bank + Math.sin(this.walkTimer * 0.5) * 0.08 * this.bobAmt;  // waddle
         }
     }
 }
