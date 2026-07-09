@@ -62,7 +62,7 @@ canvas { touch-action: none; }
 }
 
 /* =====================================================================
-   START SCREEN — "Maple Street title card"
+   START SCREEN - "Maple Street title card"
    A storybook title card of the game world: afternoon sky over a warm
    cream horizon with a lawn band at the bottom. Palette lifted straight
    from the in-game cel art (sky #6ba0dd, cream horizon #f3ead9, toon
@@ -127,7 +127,7 @@ canvas { touch-action: none; }
   margin: auto 0;                      /* vertical centering that stays scroll-safe */
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 10px;
 }
 
 /* ---- title block: hand-placed, tilted, asymmetric (not a dead-center hero) ---- */
@@ -152,7 +152,7 @@ canvas { touch-action: none; }
   margin: 0;
   font-family: 'Baloo 2', 'Chalkboard SE', 'Marker Felt', 'Comic Sans MS', cursive;
   font-weight: 800;
-  font-size: clamp(34px, 11vw, 52px);
+  font-size: clamp(28px, 8.5vw, 42px);
   line-height: 0.94;
   letter-spacing: 0.5px;
   color: var(--horizon);               /* cream fill... */
@@ -164,11 +164,11 @@ canvas { touch-action: none; }
 }
 
 #tagline {
-  margin: 12px 2px 0;
+  margin: 7px 2px 0;
   max-width: 22em;
-  font-size: 15px;
+  font-size: 12.5px;
   font-weight: 700;
-  line-height: 1.36;
+  line-height: 1.3;
   color: var(--ink);
   text-wrap: balance;
 }
@@ -179,103 +179,42 @@ canvas { touch-action: none; }
   border: 3px solid var(--ink);
   border-radius: 16px;
   box-shadow: 5px 6px 0 rgba(43,35,32,0.85);
-  padding: 14px 16px;
-}
-
-/* ---- name your dog: styled like a collar name-tag with a grommet ---- */
-#start-screen .nametag {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border-radius: 18px;
-}
-#start-screen .nametag::before {          /* the collar tag ring */
-  content: "";
-  position: absolute;
-  top: -9px; left: 24px;
-  width: 13px; height: 13px;
-  border-radius: 50%;
-  background: var(--cream);
-  border: 3px solid var(--ink);
-}
-#start-screen .nametag-label {
-  font-weight: 800;
-  font-size: 12px;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: var(--ink-soft);
-}
-#dog-name {
-  width: 100%;
-  box-sizing: border-box;
-  font-family: 'Baloo 2', 'Chalkboard SE', 'Comic Sans MS', cursive;
-  font-weight: 700;
-  font-size: 20px;                        /* >=16px so iOS Safari won't zoom on focus */
-  color: var(--ink);
-  background: var(--paper);
-  border: 3px solid var(--ink);
-  border-radius: 12px;
   padding: 11px 14px;
-  outline: none;
-  -webkit-appearance: none;
-  appearance: none;
-}
-#dog-name::placeholder { color: #b9ad9c; font-style: italic; }
-#dog-name:focus {
-  border-color: var(--treat-dk);
-  box-shadow: 3px 3px 0 var(--treat);
 }
 
-/* ---- how to play ---- */
+/* ---- how to play (compact) ---- */
 #start-screen .howto-title {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   font-family: 'Baloo 2', 'Chalkboard SE', 'Comic Sans MS', cursive;
   font-weight: 800;
-  font-size: 18px;
+  font-size: 14px;
   color: var(--ink);
 }
 #start-screen .howto-blurb {
-  margin: 0 0 12px;
-  font-size: 13.5px;
+  margin: 0 0 7px;
+  font-size: 11px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.35;
   color: var(--ink-soft);
 }
-#start-screen .controls-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: auto 1fr;       /* keys column aligns across every row */
-  gap: 9px 12px;
-  align-items: center;
+#start-screen .howto-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin-top: 4px;
 }
-#start-screen .controls-list li { display: contents; }
-#start-screen .keys { display: inline-flex; gap: 4px; }
-#start-screen kbd {
-  font-family: 'Nunito', ui-monospace, monospace;
+#start-screen .howto-plat {
+  flex: 0 0 46px;
   font-weight: 800;
-  font-size: 12px;
-  line-height: 1;
-  color: var(--ink);
-  background: var(--paper);
-  border: 2px solid var(--ink);
-  border-radius: 7px;
-  box-shadow: 0 2px 0 var(--ink);        /* keycap depth (offset, not glow) */
-  padding: 4px 7px;
-  min-width: 12px;
-  text-align: center;
-}
-#start-screen kbd.kbd-wide { letter-spacing: 0.3px; }
-#start-screen .act {
-  font-size: 13.5px;
-  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
   color: var(--ink);
 }
-#start-screen .act em {
-  font-style: normal;
+#start-screen .howto-keys {
+  font-size: 10.5px;
   font-weight: 600;
+  line-height: 1.3;
   color: var(--ink-soft);
 }
 
@@ -284,7 +223,7 @@ canvas { touch-action: none; }
 #start-screen .diff-btn {
   display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left;
   font-family: 'Baloo 2', 'Chalkboard SE', 'Comic Sans MS', cursive;
-  padding: 9px 10px; cursor: pointer; color: var(--ink);
+  padding: 7px 9px; cursor: pointer; color: var(--ink);
   background: var(--paper); border: 3px solid var(--ink); border-radius: 12px;
   box-shadow: 0 4px 0 var(--ink); -webkit-tap-highlight-color: transparent; touch-action: manipulation;
   transition: transform .06s ease, box-shadow .06s ease, background-color .1s ease;
@@ -302,10 +241,10 @@ canvas { touch-action: none; }
   align-self: center;
   margin-top: 2px;
   min-width: 210px;
-  padding: 15px 34px;
+  padding: 12px 32px;
   font-family: 'Baloo 2', 'Chalkboard SE', 'Comic Sans MS', cursive;
   font-weight: 800;
-  font-size: 24px;
+  font-size: 22px;
   letter-spacing: 0.5px;
   color: var(--ink);
   background: var(--treat);

@@ -5,7 +5,7 @@ import { toonify } from './materials.js';
 // tinted clones for NPC dogs so they match the player instead of being two boxes.
 let _proto = null;
 let _loading = null;
-export const DOG_TEXTURES = new Set();   // textures owned by the persistent proto — never dispose on scene swap
+export const DOG_TEXTURES = new Set();   // textures owned by the persistent proto - never dispose on scene swap
 
 export function preloadDog() {
     if (_proto) return Promise.resolve(_proto);

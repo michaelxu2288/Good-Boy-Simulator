@@ -62,6 +62,7 @@ outline.enabled = !(matchMedia('(pointer: coarse)').matches || navigator.maxTouc
 let trauma = 0;
 function addTrauma(amount) { trauma = Math.min(1, trauma + amount); }
 let elapsed = 0;
+let graceTimer = 0;   // startup grace: dogs stay passive for a few seconds so you don't die on spawn
 initVFX(scene);
 initBullets(scene);   // persistent pooled projectiles for gun dogs (survives scene swaps)
 
@@ -143,7 +144,7 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
 
 // bite. real mouse clicks always bite (desktop unchanged, incl. touch+mouse laptops).
-// touch/pen taps never bite via the canvas — on touch, bite is the on-screen BITE button only.
+// touch/pen taps never bite via the canvas - on touch, bite is the on-screen BITE button only.
 window.addEventListener('pointerdown', (e) => {
     if (e.pointerType !== 'mouse') return;
     if (e.target && e.target.closest && e.target.closest('#touch-controls')) return;
@@ -420,13 +421,11 @@ if(btnStart) {
 
         document.getElementById('start-screen').style.display = 'none';
 
-        // capture the player's chosen dog name -> HUD
-        const _nm = (document.getElementById('dog-name')?.value || '').trim().slice(0, 14);
-        player.dogName = _nm || 'Stray';
-        const _lvl = document.getElementById('level-display');
-        if (_lvl) _lvl.innerText = `Lvl 1 ${player.dogName}`;
+        player.dogName = 'Stray';
 
-        dogReady.then(spawnEntities);   // spawn NPCs now that difficulty is locked
+        dogReady.then(() => { spawnEntities(); graceTimer = 3; });   // grace starts once the pack has actually spawned (3s of passive dogs)
+
+        if (getDifficultyKey() !== 'easy') showToast('The block is calm. That lasts about 3 seconds.', 2800);
 
         touch.show();   // shows only on touch devices; audio user-gesture already satisfied
 
@@ -450,7 +449,7 @@ function animate() {
 
     requestAnimationFrame(animate);
 
-    const dt = clock.getDelta();
+    const dt = Math.min(clock.getDelta(), 0.1);   // clamp: a startup/tab-stall spike must not teleport physics or burn the grace
 
     elapsed += dt;
 
@@ -475,9 +474,12 @@ function animate() {
 
     // Update Entities
 
+    if (graceTimer > 0) graceTimer -= dt;
+    const grace = graceTimer > 0;   // during grace, dogs don't aggro/charge/attack/fire
+
     entities.forEach(e => {
 
-        if (e instanceof DogNPC) e.update(dt, player.group.position, player);
+        if (e instanceof DogNPC) e.update(dt, player.group.position, player, grace);
 
         else e.update(dt);
 

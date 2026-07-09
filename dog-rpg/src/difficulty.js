@@ -1,4 +1,4 @@
-// src/difficulty.js — single source of truth for v1.12 difficulty scaling.
+// src/difficulty.js - single source of truth for v1.12 difficulty scaling.
 // easy == exact pre-v1.12 behavior (all muls 1, no on-sight aggro, no gun dogs, 30 dogs).
 // medium/hard scale speed, HP, damage, size, aggression, spawn counts, and gun-dog count.
 export const DIFFICULTY = {

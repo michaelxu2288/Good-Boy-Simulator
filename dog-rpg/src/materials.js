@@ -38,7 +38,7 @@ export function pickPants()    { return pick(PALETTE.pants); }
 export function pickDogFur()   { return pick(PALETTE.dogFur); }
 
 // mark a material so the OutlineEffect skips it (grass instances, the giant sky
-// box, the ground plane — outlining those is wasteful or wrong).
+// box, the ground plane - outlining those is wasteful or wrong).
 export function noOutline(mat) {
     mat.userData.outlineParameters = { visible: false };
     return mat;

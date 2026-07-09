@@ -260,15 +260,18 @@ export class DogNPC extends Entity {
         if (on) this.targetScale = this.scaleVal * 1.12;
     }
 
-    update(dt, playerPos, playerClass) {
+    update(dt, playerPos, playerClass, grace = false) {
         if(this.dead) return;
         const d = this.diff;
         const distToPlayer = this.mesh.position.distanceTo(playerPos);
 
+        // startup grace: dogs mill about but won't aggro/charge/attack/fire yet
+        if (grace) this.isHostile = false;
+
         // gun dogs spot you from their full firing range; melee dogs only within aggroRange.
         const sightRange = this.isGun ? Math.max(d.aggroRange, d.fireRange) : d.aggroRange;
         // charge-on-sight aggro (medium/hard). easy: aggroRange 0 & no gun dogs -> never fires.
-        if (d.chargeOnSight && !this.isHostile && distToPlayer < sightRange) this.isHostile = true;
+        if (!grace && d.chargeOnSight && !this.isHostile && distToPlayer < sightRange) this.isHostile = true;
 
         if (this.isHostile) {
             if (distToPlayer > 2 && distToPlayer < d.chaseRange) {          // CHASE
@@ -299,7 +302,7 @@ export class DogNPC extends Entity {
         }
 
         // gun dogs: fire aimed tracers while the player is in range (they still chase for melee too)
-        if (this.isGun && this._muzzle && this.isHostile && distToPlayer < d.fireRange) {
+        if (!grace && this.isGun && this._muzzle && this.isHostile && distToPlayer < d.fireRange) {
             this.fireTimer += dt;
             if (this.fireTimer >= d.fireInterval) {
                 this.fireTimer = 0;
@@ -318,7 +321,7 @@ export class DogNPC extends Entity {
 
         this.mesh.position.y = getTerrainHeightAt(this.mesh.position.x, this.mesh.position.z);
 
-        // bob while active (chasing or wandering) — exaggerated stride: taller bounce + a body
+        // bob while active (chasing or wandering) - exaggerated stride: taller bounce + a body
         // rock (fore/aft gallop) + a side-to-side waddle on the wrap pivot so the dog visibly strides.
         const moving = this.isHostile || this.state === 'WANDER';
         if (moving) this.bobPhase += dt * 11 * d.gait;

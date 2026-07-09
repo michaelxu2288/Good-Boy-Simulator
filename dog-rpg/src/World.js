@@ -86,7 +86,7 @@ export function createWorld(scene) {
     noOutline(skyMat);
     scene.add(dome);
 
-    // hemisphere fill (sky/ground bounce) instead of flat ambient — stops toon
+    // hemisphere fill (sky/ground bounce) instead of flat ambient - stops toon
     // shadow bands from going dead grey and adds free color grading.
     const hemiLight = new THREE.HemisphereLight(0xbcd4ff, 0x6b7f4a, 0.6);
     scene.add(hemiLight);
@@ -451,7 +451,7 @@ export function createWorld(scene) {
             hydrant.position.set(x, y + 0.5, z);
             hydrant.castShadow = true;
             scene.add(hydrant);
-            wallColliders.push(new THREE.Box3().setFromObject(hydrant));   // was missing — dog phased through hydrants
+            wallColliders.push(new THREE.Box3().setFromObject(hydrant));   // was missing - dog phased through hydrants
             interactables.push({ type: 'hydrant', position: hydrant.position.clone(), radius: 1.5, object: hydrant });
         }
     }
