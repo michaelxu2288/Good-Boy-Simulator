@@ -2,6 +2,7 @@
   "rewrites": [
     { "source": "/internships", "destination": "/internships.html" },
     { "source": "/swe-internships", "destination": "/swe-internships.html" },
-    { "source": "/tesla", "destination": "/tesla.html" }
+    { "source": "/tesla", "destination": "/tesla.html" },
+    { "source": "/resume", "destination": "/resume.pdf" }
   ]
 }
