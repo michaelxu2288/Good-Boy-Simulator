@@ -141,8 +141,9 @@ export class DogNPC extends Entity {
         this.diff = diff;
         this.isGun = !!opts.gun;
         this.isFly = !!opts.fly;
-        const color = opts.gun ? 0xf2f2ee : (opts.fly ? 0x3a6fd6 : pickDogFur());   // gun dogs white, fly dogs blue
-        const scale = Math.min(2.6, (0.8 + Math.random() * 0.7) * (1 + diff.scaleBonus));
+        this.isBoss = !!opts.boss;
+        const color = opts.boss ? 0x2a0a0a : (opts.gun ? 0xf2f2ee : (opts.fly ? 0x3a6fd6 : pickDogFur()));   // boss dark, gun white, fly blue
+        const scale = opts.boss ? 5.0 : Math.min(2.6, (0.8 + Math.random() * 0.7) * (1 + diff.scaleBonus));
 
         const clone = makeDogClone(color);
         if (clone) {
@@ -155,8 +156,8 @@ export class DogNPC extends Entity {
             this.mesh.scale.setScalar(scale);
             this._wrap = wrap;
             this._furColor = color;
-            // gun/fly dogs: strip the brown labrador texture so the solid body color (white/blue) shows
-            if (this.isGun || this.isFly) clone.traverse((o) => {
+            // gun/fly/boss dogs: strip the brown labrador texture so the solid body color shows
+            if (this.isGun || this.isFly || this.isBoss) clone.traverse((o) => {
                 if (o.isMesh && o.material) { o.material.map = null; o.material.color.setHex(color); o.material.needsUpdate = true; }
             });
             this._eyes = this._buildEvilEyes(wrap);   // hidden until provoked
@@ -190,6 +191,12 @@ export class DogNPC extends Entity {
             this.spinPhase = Math.random() * Math.PI * 2;
             this._wingPhase = Math.random() * Math.PI * 2;
             if (this._wrap) this._buildWings(this._wrap);
+        }
+        if (this.isBoss) {   // the Alpha: huge, tanky, always hostile, capped damage so it's a fight not a one-shot
+            this.hp = 500;
+            this.damage = 22;
+            this.isHostile = true;
+            this.setEvil(true);
         }
         if (clone && diff.evilOnSpawn) this.setEvil(true);   // hard: born evil
     }
@@ -341,6 +348,7 @@ export class DogNPC extends Entity {
                 _aim.copy(playerPos); _aim.y += 0.8; _aim.sub(_mw);   // aim at torso height
                 fireBullet(_mw, _aim, d.bulletSpeed, d.bulletDamage, d.fireRange + 12);
                 muzzleFlash(_mw.clone());
+                if (distToPlayer < 45) AudioSys.gunshot(Math.max(0.05, 0.22 * (1 - distToPlayer / 45)));   // quieter with distance
             }
         }
 

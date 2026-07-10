@@ -11,7 +11,7 @@
 </head>
 <body>
     <div id="start-screen">
-        <span id="version-tag">v1.15</span>
+        <span id="version-tag">v1.16</span>
 
         <div class="menu">
             <div class="titleblock">
@@ -44,6 +44,8 @@
 
             <button id="btn-start">Wake Up</button>
 
+            <p id="start-best"></p>
+
             <p class="footer">Suggestions? Email <a href="mailto:mikey@doggame.dog">mikey@doggame.dog</a></p>
         </div>
     </div>
@@ -52,11 +54,17 @@
         <div class="bar-container">HP <div id="hp-bar" class="bar-fill"></div></div>
         <div class="bar-container">SIZE <div id="xp-bar" class="bar-fill"></div></div>
         <h2 id="level-display">Lvl 1 Stray</h2>
+        <div id="buffs"></div>
+        <div id="score-display">Score 0 · Best 0</div>
     </div>
 
     <div id="dialogue-box"></div>
 
     <div id="door-prompt">🐾 Press SNIFF to enter</div>
+
+    <div id="lowhp-vignette"></div>
+    <button id="btn-mute" type="button" aria-label="Mute audio" tabindex="-1">🔊</button>
+    <div id="threat-arrows"></div>
 
     <div id="controls">
         WASD: Move | SHIFT: Run | SPACE: Jump | E: Beg | CLICK: Bite | F: Sniff
@@ -71,6 +79,16 @@
             <button id="btn-sniff"  class="touch-control tbtn" type="button" tabindex="-1">SNIFF</button>
             <button id="btn-beg"    class="touch-control tbtn" type="button" tabindex="-1">BEG</button>
             <button id="btn-bite"   class="touch-control tbtn tbtn-bite" type="button" tabindex="-1">BITE</button>
+        </div>
+    </div>
+
+    <!-- win screen -->
+    <div id="win-screen">
+        <div class="win-card">
+            <h1>🏆 TOP DOG!</h1>
+            <p>You took down the Alpha and now you rule the block.</p>
+            <p id="win-stats"></p>
+            <button id="btn-again" type="button">Play Again</button>
         </div>
     </div>
 

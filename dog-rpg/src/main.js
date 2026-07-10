@@ -65,6 +65,12 @@ let elapsed = 0;
 let graceTimer = 0;   // startup grace: dogs stay passive for a few seconds so you don't die on spawn
 const BITE_COOLDOWN = 1.0;   // seconds between bites (shown as a radial timer on the mobile BITE button)
 let biteCd = 0;
+let lowHpTimer = 0;   // spacing for the low-HP heartbeat cue
+let score = 0;
+let best = 0;
+try { best = Math.max(0, +(localStorage.getItem('gbs_best') || 0)) || 0; } catch { /* no storage */ }
+const GOAL_SCORE = 1500;
+let bossActive = false, won = false;
 initVFX(scene);
 initBullets(scene);   // persistent pooled projectiles for gun dogs (survives scene swaps)
 
@@ -82,6 +88,91 @@ function onSniff() {
     if (!inApartment && nearDoor) { AudioSys.sniff(); loadApartment(); return; }
     doSniff();
 }
+
+// audio mute toggle (button + M key) and the low-HP red vignette
+const btnMute = document.getElementById('btn-mute');
+const lowHpVignette = document.getElementById('lowhp-vignette');
+function updateMute() { if (btnMute) btnMute.textContent = AudioSys.muted ? '🔇' : '🔊'; }
+function toggleMute() { AudioSys.toggleMute(); updateMute(); }
+if (btnMute) btnMute.addEventListener('click', (e) => { e.stopPropagation(); toggleMute(); });
+
+// active-buff badges HUD
+const buffsEl = document.getElementById('buffs');
+function updateBuffs() {
+    if (!buffsEl) return;
+    let html = '';
+    if (player.speedBuffT > 0) html += `<span class="buff buff-speed">⚡ ${Math.ceil(player.speedBuffT)}</span>`;
+    if (player.shieldT > 0) html += `<span class="buff buff-shield">🛡 ${Math.ceil(player.shieldT)}</span>`;
+    buffsEl.innerHTML = html;
+}
+
+// --- THREAT INDICATOR ARROWS: edge arrows pointing at nearby off-screen hostile dogs ---
+const arrowLayer = document.getElementById('threat-arrows');
+const arrowPool = [];
+if (arrowLayer) for (let i = 0; i < 8; i++) {
+    const a = document.createElement('div');
+    a.className = 'threat-arrow'; a.textContent = '➤'; a.style.display = 'none';
+    arrowLayer.appendChild(a); arrowPool.push(a);
+}
+const _proj = new THREE.Vector3();
+function updateThreatArrows() {
+    if (!arrowLayer) return;
+    if (inApartment) { for (const a of arrowPool) a.style.display = 'none'; return; }
+    const W = window.innerWidth, H = window.innerHeight, cx = W / 2, cy = H / 2;
+    const threats = [];
+    for (const e of entities) {
+        if (!(e instanceof DogNPC) || e.dead || !e.isHostile) continue;
+        const d = player.group.position.distanceTo(e.mesh.position);
+        if (d < 55) threats.push({ e, d });
+    }
+    threats.sort((a, b) => a.d - b.d);
+    let n = 0;
+    for (const { e } of threats) {
+        if (n >= arrowPool.length) break;
+        _proj.copy(e.mesh.position); _proj.y += 1.5; _proj.project(camera);
+        const behind = _proj.z > 1;
+        let x = _proj.x, y = _proj.y;
+        if (behind) { x = -x; y = -y; }
+        if (!behind && Math.abs(_proj.x) <= 0.98 && Math.abs(_proj.y) <= 0.98) continue;  // on-screen -> visible already
+        const mag = Math.max(Math.abs(x), Math.abs(y)) || 1;
+        x = x / mag * 0.86; y = y / mag * 0.86;   // clamp onto the edge box
+        const sx = (x * 0.5 + 0.5) * W, sy = (-y * 0.5 + 0.5) * H;
+        const ang = Math.atan2(sy - cy, sx - cx);
+        const a = arrowPool[n++];
+        a.style.display = 'block';
+        a.style.left = sx + 'px'; a.style.top = sy + 'px';
+        a.style.transform = `translate(-50%, -50%) rotate(${ang}rad)`;
+        a.style.color = e.isGun ? '#ffffff' : (e.isFly ? '#4a86e8' : '#ff3b30');
+    }
+    for (; n < arrowPool.length; n++) arrowPool[n].style.display = 'none';
+}
+
+// --- SCORE / GOAL / ALPHA BOSS ---
+const scoreEl = document.getElementById('score-display');
+function updateScore() { if (scoreEl) scoreEl.textContent = `Score ${score} · Best ${best}`; }
+function addScore(n) {
+    score += n;
+    if (score > best) { best = score; try { localStorage.setItem('gbs_best', String(best)); } catch { /* */ } }
+    updateScore();
+}
+function spawnBoss() {
+    const fwd = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.group.rotation.y);
+    const bp = player.group.position.clone().add(fwd.multiplyScalar(14));
+    entities.push(new DogNPC(scene, bp.x, bp.z, { boss: true }));
+    addTrauma(0.7);
+    showToast('🐺 THE ALPHA HAS ARRIVED. Take it down to become TOP DOG!', 4200);
+}
+function win() {
+    if (won) return;
+    won = true;
+    const ws = document.getElementById('win-screen');
+    const st = document.getElementById('win-stats');
+    if (st) st.textContent = `Final score ${score}  ·  Best ${best}`;
+    if (ws) ws.style.display = 'flex';
+    AudioSys.powerup();
+}
+document.getElementById('btn-again')?.addEventListener('click', () => location.reload());
+{ const sb = document.getElementById('start-best'); if (sb) sb.textContent = best > 0 ? `🏆 Best score: ${best}` : ''; }
 
 // nearest-beggable-human highlight: subtle gold emissive tell (§27 feedback)
 let highlighted = null;
@@ -116,6 +207,27 @@ let entities = [];
 
 const treats = [];
 
+// --- POWERUPS ---
+const powerups = [];
+const POWERUP_DEFS = {
+    speed:  { color: 0x33ddff, label: '⚡ Speed boost!' },
+    shield: { color: 0xffd23f, label: '🛡 Shield up!' },
+    heal:   { color: 0x39d353, label: '❤ Healed!' },
+};
+function spawnPowerup(pos, type) {
+    const def = POWERUP_DEFS[type];
+    const g = new THREE.Group();
+    const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 0), new THREE.MeshBasicMaterial({ color: def.color }));
+    const haloMat = new THREE.MeshBasicMaterial({ color: def.color, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false });
+    haloMat.userData.outlineParameters = { visible: false };
+    const halo = new THREE.Mesh(new THREE.IcosahedronGeometry(0.85, 0), haloMat);
+    g.add(halo, core);
+    g.position.set(pos.x, 1.3, pos.z);
+    g.userData = { type };
+    scene.add(g);
+    powerups.push(g);
+}
+
 
 
 function spawnEntities() {
@@ -149,6 +261,8 @@ window.addEventListener('keydown', e => {
 
     if(e.code === 'KeyE') interact();                               // beg/sniff moved to E
 
+    if (e.key === 'm') toggleMute();
+
     if (e.key === 'p') {
 
         window.location.href = '/easter_egg.html';
@@ -163,7 +277,7 @@ window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase
 // touch/pen taps never bite via the canvas - on touch, bite is the on-screen BITE button only.
 window.addEventListener('pointerdown', (e) => {
     if (e.pointerType !== 'mouse') return;
-    if (e.target && e.target.closest && e.target.closest('#touch-controls')) return;
+    if (e.target !== renderer.domElement) return;   // only the canvas bites; ignore HUD buttons
     attack();
 });
 
@@ -269,6 +383,8 @@ function attack() {
                 addTrauma(0.3);
 
                 if (dead) {
+                    addScore(Math.round(12 + e.scaleVal * 18 + (e.isGun ? 30 : 0) + (e.isFly ? 24 : 0) + (e.isBoss ? 1000 : 0)));
+                    if (e.isBoss) win();
                     addTrauma(0.45);
                     player.increaseSpeed(5);
                     showToast('u slimed a dog, +5 speed, +5 sprint', 3000);
@@ -280,6 +396,12 @@ function attack() {
                     scene.add(orb);
                     treats.push(orb);
                     burst(orb.position.clone(), 0x9be7a0, 22, 8);
+
+                    // ~35% chance to also drop a powerup
+                    if (Math.random() < 0.35) {
+                        const types = ['speed', 'shield', 'heal'];
+                        spawnPowerup(e.mesh.position, types[Math.floor(Math.random() * types.length)]);
+                    }
                 }
 
             }
@@ -337,6 +459,7 @@ function loadApartment() {
     disposeScene(scene);
 
     treats.length = 0;
+    powerups.length = 0;
     highlighted = null;
     resetBullets();   // drop any in-flight shots so they don't cross the scene boundary
 
@@ -384,6 +507,7 @@ function loadWorld() {
     disposeScene(scene);
 
     treats.length = 0;
+    powerups.length = 0;
     highlighted = null;
     resetBullets();   // drop any in-flight shots so they don't cross the scene boundary
 
@@ -447,6 +571,8 @@ if(btnStart) {
 
         player.dogName = 'Stray';
 
+        score = 0; updateScore();
+
         dogReady.then(() => { spawnEntities(); graceTimer = 3; });   // grace starts once the pack has actually spawned (3s of passive dogs)
 
         if (getDifficultyKey() !== 'easy') showToast('The block is calm. That lasts about 3 seconds.', 2800);
@@ -502,6 +628,14 @@ function animate() {
     const grace = graceTimer > 0;   // during grace, dogs don't aggro/charge/attack/fire
     if (biteCd > 0) biteCd -= dt;   // bite cooldown
 
+    // low-HP warning: heartbeat cue + red vignette when under 25%
+    const lowHp = !inApartment && player.hp / player.maxHp < 0.25;
+    if (lowHp) {
+        lowHpTimer -= dt;
+        if (lowHpTimer <= 0) { AudioSys.heartbeat(); lowHpTimer = 0.9; }
+    } else lowHpTimer = 0;
+    if (lowHpVignette) lowHpVignette.classList.toggle('active', lowHp);
+
     entities.forEach(e => {
 
         if (e instanceof DogNPC) e.update(dt, player.group.position, player, grace);
@@ -531,6 +665,8 @@ function animate() {
 
             player.grow(t.userData.value);
 
+            if (t.userData.type !== 'essence') addScore(8);   // treats add a little score (kills already scored)
+
             burst(t.position.clone(), t.userData.type === 'essence' ? 0x39d353 : 0xffd23f, 16, 5.5);
 
             scene.remove(t);
@@ -540,6 +676,28 @@ function animate() {
         }
 
     }
+
+
+
+    // Powerups: bob + spin, pick up on contact
+    for (let i = powerups.length - 1; i >= 0; i--) {
+        const p = powerups[i];
+        p.rotation.y += dt * 1.6;
+        p.position.y = 1.3 + Math.sin(elapsed * 2.2 + i) * 0.22;
+        if (player.group.position.distanceTo(p.position) < 2.4 * player.size) {
+            player.applyPowerup(p.userData.type);
+            burst(p.position.clone(), POWERUP_DEFS[p.userData.type].color, 20, 6.5);
+            showToast(POWERUP_DEFS[p.userData.type].label, 1500);
+            scene.remove(p);
+            p.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+            powerups.splice(i, 1);
+        }
+    }
+    updateBuffs();
+    updateThreatArrows();
+
+    // goal: once you rack up enough score, the Alpha boss shows up. beat it to win.
+    if (!bossActive && !won && !inApartment && score >= GOAL_SCORE) { bossActive = true; spawnBoss(); }
 
 
 

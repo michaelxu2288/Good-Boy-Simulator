@@ -44,7 +44,9 @@ export class Player {
         this.stamina = 100;
         this.baseSpeed = 15;
         this.sprintSpeed = 30;
-        
+        this.speedBuffT = 0;   // powerup timers
+        this.shieldT = 0;
+
         // Animation Vars
         this.walkTimer = 0;
     }
@@ -54,9 +56,20 @@ export class Player {
         this.sprintSpeed += amount;
     }
 
+    // apply a picked-up powerup: speed boost / temp shield / heal
+    applyPowerup(type) {
+        if (type === 'speed') this.speedBuffT = 8;
+        else if (type === 'shield') this.shieldT = 6;
+        else if (type === 'heal') {
+            this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.6);
+            document.getElementById('hp-bar').style.width = (this.hp / this.maxHp * 100) + '%';
+        }
+        AudioSys.powerup();
+    }
+
     // normal-physics jump (only off the ground); gravity in update() brings it back down
     jump() {
-        if (this.grounded) { this.vy = 14; this.grounded = false; }
+        if (this.grounded) { this.vy = 14; this.grounded = false; AudioSys.jumpSfx(); }
     }
 
     grow(amount) {
@@ -79,6 +92,7 @@ export class Player {
     }
 
     takeDamage(amt) {
+        if (this.shieldT > 0) { AudioSys.hit(); return; }   // shielded: absorb, no damage
         this.hp -= amt;
         AudioSys.hit();
         if(this.hp <= 0) {
@@ -92,8 +106,10 @@ export class Player {
     }
 
     update(dt, keys, wallColliders) {
+        if (this.speedBuffT > 0) this.speedBuffT -= dt;
+        if (this.shieldT > 0) this.shieldT -= dt;
         let isMoving = false;
-        const speed = keys.shift ? this.sprintSpeed : this.baseSpeed;
+        const speed = (keys.shift ? this.sprintSpeed : this.baseSpeed) * (this.speedBuffT > 0 ? 1.7 : 1);
 
         // Rotation
         const turn = (keys.a ? 1 : 0) - (keys.d ? 1 : 0);
