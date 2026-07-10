@@ -61,6 +61,29 @@ canvas { touch-action: none; }
   font-size: 14px;
 }
 
+/* "press SNIFF to enter" popup shown only when the dog is right at a house door */
+#door-prompt {
+  position: absolute;
+  bottom: 130px; left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  z-index: 12;
+  padding: 10px 18px;
+  background: rgba(43,35,32,0.88);
+  color: #fff;
+  border: 2px solid #ffcf3f;
+  border-radius: 12px;
+  font-family: 'Baloo 2', 'Nunito', -apple-system, sans-serif;
+  font-weight: 800;
+  font-size: 16px;
+  white-space: nowrap;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.45);
+  pointer-events: none;
+}
+@media (pointer: coarse) {
+  #door-prompt { bottom: calc(230px + var(--safe-b, 0px)); }   /* clear of the touch-button cluster */
+}
+
 /* =====================================================================
    START SCREEN - "Maple Street title card"
    A storybook title card of the game world: afternoon sky over a warm

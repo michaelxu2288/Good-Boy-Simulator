@@ -106,10 +106,17 @@ export class Player {
             const dir = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.group.rotation.y);
             if (keys.s) dir.negate();
             const step = dir.multiplyScalar(speed * dt);
+            // unstick: if we're already wedged inside a collider (shoved there by a hit/recoil/spawn),
+            // move freely so the dog can walk back out instead of being permanently frozen.
+            const curBox = new THREE.Box3().setFromCenterAndSize(this.group.position, new THREE.Vector3(1, 2, 1));
+            let stuck = false;
+            for (const w of wallColliders) if (curBox.intersectsBox(w)) { stuck = true; break; }
             const tryAxis = (dx, dz) => {
                 const np = this.group.position.clone(); np.x += dx; np.z += dz;
-                const b = new THREE.Box3().setFromCenterAndSize(np, new THREE.Vector3(1, 2, 1));
-                for (const w of wallColliders) if (b.intersectsBox(w)) return false;
+                if (!stuck) {
+                    const b = new THREE.Box3().setFromCenterAndSize(np, new THREE.Vector3(1, 2, 1));
+                    for (const w of wallColliders) if (b.intersectsBox(w)) return false;
+                }
                 this.group.position.copy(np); return true;
             };
             if (!tryAxis(step.x, step.z)) { tryAxis(step.x, 0); tryAxis(0, step.z); }

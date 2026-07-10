@@ -168,7 +168,10 @@ export function createWorld(scene) {
         return tex;
     }
 
-    const groundGeo = new THREE.PlaneGeometry(500, 500, 128, 128);
+    // high segment count so the visual ground closely matches getTerrainHeightAt on the hills;
+    // a coarse mesh flat-interpolates between vertices and entities (which sample the exact
+    // height) then appear to sink/float on slopes.
+    const groundGeo = new THREE.PlaneGeometry(500, 500, 256, 256);
     
     // Slight uneven terrain
     const posAttribute = groundGeo.attributes.position;

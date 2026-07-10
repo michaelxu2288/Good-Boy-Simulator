@@ -63,7 +63,7 @@ let trauma = 0;
 function addTrauma(amount) { trauma = Math.min(1, trauma + amount); }
 let elapsed = 0;
 let graceTimer = 0;   // startup grace: dogs stay passive for a few seconds so you don't die on spawn
-const BITE_COOLDOWN = 0.67;   // seconds between bites (shown as a radial timer on the mobile BITE button)
+const BITE_COOLDOWN = 1.0;   // seconds between bites (shown as a radial timer on the mobile BITE button)
 let biteCd = 0;
 initVFX(scene);
 initBullets(scene);   // persistent pooled projectiles for gun dogs (survives scene swaps)
@@ -72,6 +72,15 @@ initBullets(scene);   // persistent pooled projectiles for gun dogs (survives sc
 function doSniff() {
     AudioSys.sniff();
     burst(player.group.position.clone().add(new THREE.Vector3(0, 0.35, 0)), 0xd9c7a0, 10, 2.2, 0.22);
+}
+
+// SNIFF also enters a house, but only when you're right at its door AND you press it (replaces the
+// old auto-enter-on-touch, which fired accidentally). the door prompt shows only while nearDoor is set.
+let nearDoor = null;
+const doorPrompt = document.getElementById('door-prompt');
+function onSniff() {
+    if (!inApartment && nearDoor) { AudioSys.sniff(); loadApartment(); return; }
+    doSniff();
 }
 
 // nearest-beggable-human highlight: subtle gold emissive tell (§27 feedback)
@@ -134,7 +143,7 @@ window.addEventListener('keydown', e => {
 
     if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true;
 
-    if(e.code === 'KeyF') doSniff();
+    if(e.code === 'KeyF') onSniff();
 
     if(e.code === 'Space') { e.preventDefault(); player.jump(); }   // Space now jumps
 
@@ -331,6 +340,9 @@ function loadApartment() {
     highlighted = null;
     resetBullets();   // drop any in-flight shots so they don't cross the scene boundary
 
+    nearDoor = null;
+    if (doorPrompt) doorPrompt.style.display = 'none';   // hide the door prompt while indoors
+
 
 
     // Clear entities
@@ -413,7 +425,7 @@ const touch = initTouchControls({
     keys,
     interact,
     attack,
-    sniff: doSniff,
+    sniff: onSniff,
     jump: () => player.jump(),
 });
 
@@ -555,23 +567,24 @@ function animate() {
 
     } else {
 
-        if (worldData.houseEntryColliders) {
+        // no more auto-enter: find the nearest house door within reach and show the SNIFF-to-enter prompt.
+        // actual entry happens in onSniff() when nearDoor is set.
 
-            const playerBox = new THREE.Box3().setFromObject(player.group);
+        let door = null, dd = Infinity;
 
-            for (const entry of worldData.houseEntryColliders) {
+        for (const it of (worldData.interactables || [])) {
 
-                if (playerBox.intersectsBox(entry)) {
+            if (it.type !== 'house') continue;
 
-                    loadApartment();
+            const d = distXZ(player.group.position, it.position);
 
-                    break;
-
-                }
-
-            }
+            if (d < it.radius + 2 && d < dd) { dd = d; door = it; }
 
         }
+
+        nearDoor = door;
+
+        if (doorPrompt) doorPrompt.style.display = door ? 'block' : 'none';
 
     }
 
