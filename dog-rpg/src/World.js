@@ -51,6 +51,33 @@ function makeTuft() {
     return mergeGeometries(blades, false);
 }
 
+// --- day/night grading (§09): sky/light/fog palettes keyed by sun height (-1..1) ---
+const DAY_LENGTH = 300;   // seconds for a full sun cycle (slow + ambient)
+const SUN_AZ = 2.35;      // fixed compass azimuth the sun arcs along
+const _SKY_NIGHT = { zen: 0x0a1230, hor: 0x1b2846, sun: 0x9fb4e6, fog: 0x131d33, dir: 0x9fb4e6, dirI: 0.30, hemiS: 0x2b3b64, hemiG: 0x171f33, hemiI: 0.35 };
+const _SKY_DUSK  = { zen: 0x33508e, hor: 0xff9d5c, sun: 0xffb066, fog: 0xdf9f77, dir: 0xffb076, dirI: 1.05, hemiS: 0x8ea6d6, hemiG: 0x6b5f43, hemiI: 0.50 };
+const _SKY_DAY   = { zen: 0x6ba0dd, hor: 0xf3ead9, sun: 0xfff2d6, fog: 0xf3ead9, dir: 0xffffff, dirI: 1.50, hemiS: 0xbcd4ff, hemiG: 0x6b7f4a, hemiI: 0.60 };
+const _smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const _gz = new THREE.Color(), _gh = new THREE.Color(), _gs = new THREE.Color(), _gf = new THREE.Color(), _gd = new THREE.Color(), _ghs = new THREE.Color(), _ghg = new THREE.Color(), _gtmp = new THREE.Color();
+const _grade = { zen: _gz, hor: _gh, sun: _gs, fog: _gf, dir: _gd, hemiS: _ghs, hemiG: _ghg, dirI: 1.5, hemiI: 0.6 };
+function gradeSky(s) {
+    let a, b, f;
+    if (s <= -0.2) { a = b = _SKY_NIGHT; f = 0; }
+    else if (s < 0.05) { a = _SKY_NIGHT; b = _SKY_DUSK; f = _smooth(-0.2, 0.05, s); }
+    else if (s < 0.35) { a = _SKY_DUSK; b = _SKY_DAY; f = _smooth(0.05, 0.35, s); }
+    else { a = b = _SKY_DAY; f = 1; }
+    _gz.setHex(a.zen).lerp(_gtmp.setHex(b.zen), f);
+    _gh.setHex(a.hor).lerp(_gtmp.setHex(b.hor), f);
+    _gs.setHex(a.sun).lerp(_gtmp.setHex(b.sun), f);
+    _gf.setHex(a.fog).lerp(_gtmp.setHex(b.fog), f);
+    _gd.setHex(a.dir).lerp(_gtmp.setHex(b.dir), f);
+    _ghs.setHex(a.hemiS).lerp(_gtmp.setHex(b.hemiS), f);
+    _ghg.setHex(a.hemiG).lerp(_gtmp.setHex(b.hemiG), f);
+    _grade.dirI = a.dirI + (b.dirI - a.dirI) * f;
+    _grade.hemiI = a.hemiI + (b.hemiI - a.hemiI) * f;
+    return _grade;
+}
+
 export function getTerrainHeightAt(x, z) {
     // flat neighborhood CORE, rolling hills toward the EDGES. the core (the main play area +
     // roads) stays perfectly flat so movement is clean; the outer ring has real xyz terrain that
@@ -138,6 +165,39 @@ export function createWorld(scene) {
         const sc = 55 + Math.random() * 55; s.scale.set(sc, sc * 0.6, 1);
         scene.add(s); clouds.push(s);
     }
+
+    // night starfield (fades in after dusk) - screen-constant points high on the dome
+    const starN = 700;
+    const starGeo = new THREE.BufferGeometry();
+    const sPos = new Float32Array(starN * 3);
+    const _sv = new THREE.Vector3();
+    for (let i = 0; i < starN; i++) {
+        _sv.randomDirection().multiplyScalar(560);
+        sPos[i * 3] = _sv.x; sPos[i * 3 + 1] = Math.abs(_sv.y) * 0.85 + 30; sPos[i * 3 + 2] = _sv.z;
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(sPos, 3));
+    const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.7, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, fog: false });
+    noOutline(starMat);
+    const stars = new THREE.Points(starGeo, starMat);
+    stars.frustumCulled = false; stars.renderOrder = -0.5;
+    scene.add(stars);
+
+    // drifting ambient motes (pollen by day) - gentle floating specks that catch the light (§17)
+    const moteN = 150;
+    const moteGeo = new THREE.BufferGeometry();
+    const motePos = new Float32Array(moteN * 3);
+    const moteBase = [];
+    for (let i = 0; i < moteN; i++) {
+        const bx = (Math.random() - 0.5) * 270, by = 3 + Math.random() * 34, bz = (Math.random() - 0.5) * 270, ph = Math.random() * 6.28;
+        moteBase.push({ bx, by, bz, ph });
+        motePos[i * 3] = bx; motePos[i * 3 + 1] = by; motePos[i * 3 + 2] = bz;
+    }
+    moteGeo.setAttribute('position', new THREE.BufferAttribute(motePos, 3));
+    const moteMat = new THREE.PointsMaterial({ color: 0xfff6d8, size: 0.5, transparent: true, opacity: 0.3, depthWrite: false, fog: true });
+    noOutline(moteMat);
+    const motes = new THREE.Points(moteGeo, moteMat);
+    motes.frustumCulled = false;
+    scene.add(motes);
 
 
     // --- 2. TERRAIN ---
@@ -484,12 +544,44 @@ export function createWorld(scene) {
         );
     };
 
-    // live per-frame handle (§05): lets the loop drive wind + cloud drift (and later day/night).
+    // live per-frame handle (§05): lets the loop drive wind + cloud drift + day/night + weather.
+    let phaseOverride = null;   // test hook: pin the time of day
+    const moteArr = moteGeo.attributes.position.array;
     return {
         wallColliders, houseEntryColliders, interactables,
+        setPhaseOverride(p) { phaseOverride = p; },
         update(t) {
             windUniform.value = t;
             for (const c of clouds) c.position.x = ((c.userData.baseX + t * c.userData.driftX + 190) % 380) - 190;
+
+            // day/night: arc the sun, regrade sky/fog/lights, fade stars in + motes out at night
+            const phase = phaseOverride != null ? phaseOverride : ((0.22 + t / DAY_LENGTH) % 1);
+            const theta = phase * Math.PI * 2;
+            const sunH = Math.sin(theta);
+            sunDir.set(Math.cos(SUN_AZ) * Math.cos(theta), sunH, Math.sin(SUN_AZ) * Math.cos(theta)).normalize();
+            const g = gradeSky(sunH);
+            skyMat.uniforms.uZenith.value.copy(g.zen);
+            skyMat.uniforms.uHorizon.value.copy(g.hor);
+            skyMat.uniforms.uSunCol.value.copy(g.sun);
+            skyMat.uniforms.uSunDir.value.copy(sunDir);
+            dirLight.color.copy(g.dir);
+            dirLight.intensity = g.dirI;
+            dirLight.position.copy(sunDir).multiplyScalar(150);
+            hemiLight.color.copy(g.hemiS);
+            hemiLight.groundColor.copy(g.hemiG);
+            hemiLight.intensity = g.hemiI;
+            if (scene.fog) scene.fog.color.copy(g.fog);
+
+            const daylight = _smooth(-0.05, 0.35, sunH);
+            starMat.opacity = (1 - _smooth(-0.2, 0.12, sunH)) * 0.9;
+            moteMat.opacity = 0.12 + daylight * 0.32;
+            for (let i = 0; i < moteN; i++) {
+                const b = moteBase[i];
+                moteArr[i * 3] = b.bx + Math.sin(t * 0.3 + b.ph) * 3;
+                moteArr[i * 3 + 1] = b.by + Math.sin(t * 0.5 + b.ph * 1.7) * 1.6;
+                moteArr[i * 3 + 2] = b.bz + Math.cos(t * 0.25 + b.ph) * 3;
+            }
+            moteGeo.attributes.position.needsUpdate = true;
         },
     };
 }
