@@ -167,7 +167,7 @@ canvas { touch-action: none; }
 /* mute toggle (top-right, in-game) */
 #btn-mute {
   position: absolute;
-  top: max(env(safe-area-inset-top, 0px), 10px);
+  top: calc(max(env(safe-area-inset-top, 0px), 10px) + 142px);
   right: max(env(safe-area-inset-right, 0px), 10px);
   z-index: 18;
   width: 42px; height: 42px;
@@ -179,6 +179,18 @@ canvas { touch-action: none; }
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
+
+/* radar minimap (§33): heading-up dish, top-right; hidden indoors via JS */
+#minimap {
+  position: absolute;
+  top: max(env(safe-area-inset-top, 0px), 10px);
+  right: max(env(safe-area-inset-right, 0px), 10px);
+  width: 132px; height: 132px;
+  z-index: 12;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 5px rgba(0,0,0,0.4));
+}
+#minimap-canvas { width: 132px; height: 132px; display: block; }
 
 /* low-HP red vignette (pulses when the dog is badly hurt) */
 #lowhp-vignette {

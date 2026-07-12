@@ -15,6 +15,8 @@ import { jawSnap } from './vfx.js';
 
 import { initJuice, popText } from './juice.js';
 
+import { initMinimap, updateMinimap } from './minimap.js';
+
 import { initBullets, updateBullets, resetBullets } from './Bullets.js';
 
 import { showToast } from './ui.js';
@@ -78,6 +80,7 @@ const GOAL_SCORE = 1500;
 let bossActive = false, won = false;
 initVFX(scene);
 initJuice();
+initMinimap();
 initBullets(scene);   // persistent pooled projectiles for gun dogs (survives scene swaps)
 
 // sniff = sound + a little scent puff (ties the new VFX to the interaction)
@@ -717,6 +720,11 @@ function animate() {
     }
     updateBuffs();
     updateThreatArrows();
+
+    // radar minimap (outdoors only)
+    const mm = document.getElementById('minimap');
+    if (inApartment) { if (mm) mm.style.display = 'none'; }
+    else { if (mm) mm.style.display = 'block'; updateMinimap(player, entities, worldData.interactables); }
 
     // goal: once you rack up enough score, the Alpha boss shows up. beat it to win.
     if (!bossActive && !won && !inApartment && score >= GOAL_SCORE) { bossActive = true; spawnBoss(); }
