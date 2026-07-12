@@ -64,6 +64,18 @@ canvas { touch-action: none; }
   text-shadow: 2px 2px 0 #000;
 }
 
+/* current objective tracker (§30) */
+#quest-tracker {
+  margin-top: 6px;
+  display: none;
+  font-family: 'Baloo 2', 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 14px;
+  color: #ffe9a8;
+  text-shadow: 2px 2px 0 #000;
+}
+#quest-tracker.done { color: #6ff08a; }
+
 /* best score on the start screen */
 #start-screen #start-best {
   margin: 2px 0 0;

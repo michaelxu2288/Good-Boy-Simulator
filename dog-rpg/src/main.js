@@ -183,6 +183,44 @@ function win() {
 document.getElementById('btn-again')?.addEventListener('click', () => location.reload());
 { const sb = document.getElementById('start-best'); if (sb) sb.textContent = best > 0 ? `🏆 Best score: ${best}` : ''; }
 
+// --- QUESTS / OBJECTIVES (§30): a rotating goal with a HUD tracker + reward on completion ---
+const QUESTS = [
+    { id: 'bite',    n: 3, label: (n) => `Bite ${n} rival dogs`,      reward: 80 },
+    { id: 'treat',   n: 2, label: (n) => `Beg ${n} treats from humans`, reward: 70 },
+    { id: 'sniff',   n: 3, label: (n) => `Sniff ${n} spots (trees/hydrants/houses)`, reward: 60 },
+    { id: 'gun',     n: 2, label: (n) => `Take down ${n} gun dogs`,    reward: 130 },
+    { id: 'powerup', n: 1, label: (n) => `Grab ${n} powerup`,          reward: 60 },
+];
+let questIdx = 0, questProg = 0, questActive = false;
+const questEl = document.getElementById('quest-tracker');
+function renderQuest(done) {
+    if (!questEl) return;
+    const q = QUESTS[questIdx % QUESTS.length];
+    questEl.style.display = questActive ? 'block' : 'none';
+    questEl.classList.toggle('done', !!done);
+    questEl.textContent = done ? '🎯 Objective complete!' : `🎯 ${q.label(q.n)}  (${questProg}/${q.n})`;
+}
+function startQuests() { questIdx = 0; questProg = 0; questActive = true; renderQuest(false); }
+function bumpQuest(id, amount = 1) {
+    if (!questActive) return;
+    const q = QUESTS[questIdx % QUESTS.length];
+    if (q.id !== id) return;
+    questProg += amount;
+    if (questProg >= q.n) {
+        addScore(q.reward);
+        showToast(`🎯 Objective complete! +${q.reward} score`, 2600);
+        AudioSys.powerup();
+        // drop a reward powerup right where the dog is standing
+        const types = ['speed', 'shield', 'heal'];
+        spawnPowerup(player.group.position.clone().add(new THREE.Vector3(0, 0, 2)), types[Math.floor(Math.random() * types.length)]);
+        renderQuest(true);
+        questIdx++; questProg = 0;
+        setTimeout(() => renderQuest(false), 2000);   // reveal the next objective after a beat
+    } else {
+        renderQuest(false);
+    }
+}
+
 // nearest-beggable-human highlight: subtle gold emissive tell (§27 feedback)
 let highlighted = null;
 function setGlow(entity, on) {
@@ -318,6 +356,7 @@ const distXZ = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);   // horizontal dista
 
 function sniffProp(kind, prop) {
     doSniff();
+    bumpQuest('sniff');   // objective progress
     if (kind === 'hydrant') {
         if (!prop.sniffed) { prop.sniffed = true; player.grow(0.02); showToast('You marked your territory! +size', 2200); }
         else showToast('Sniff… another dog was here.', 1800);
@@ -403,6 +442,7 @@ function attack() {
                     addScore(pts);
                     const scorePos = e.mesh.position.clone(); scorePos.y += 3.4;
                     popText(scorePos, camera, '+' + pts, 'score');
+                    if (!e.isBoss) { bumpQuest('bite'); if (e.isGun) bumpQuest('gun'); }   // objective progress
                     hitStop(e.isBoss ? 0.13 : 0.07);   // punchy freeze on a kill
                     if (e.isBoss) win();
                     addTrauma(0.45);
@@ -593,6 +633,8 @@ if(btnStart) {
 
         score = 0; updateScore();
 
+        startQuests();   // first objective goes live
+
         dogReady.then(() => { spawnEntities(); graceTimer = 3; });   // grace starts once the pack has actually spawned (3s of passive dogs)
 
         if (getDifficultyKey() !== 'easy') showToast('The block is calm. That lasts about 3 seconds.', 2800);
@@ -689,6 +731,8 @@ function animate() {
 
             if (t.userData.type !== 'essence') addScore(8);   // treats add a little score (kills already scored)
 
+            if (t.userData.type === 'treat') bumpQuest('treat');   // objective progress
+
             popText(t.position.clone().add(new THREE.Vector3(0, 1.4, 0)), camera, t.userData.type === 'essence' ? '+size' : '+8', t.userData.type === 'essence' ? 'heal' : 'score');
 
             burst(t.position.clone(), t.userData.type === 'essence' ? 0x39d353 : 0xffd23f, 16, 5.5);
@@ -713,6 +757,7 @@ function animate() {
             burst(p.position.clone(), POWERUP_DEFS[p.userData.type].color, 20, 6.5);
             popText(p.position.clone().add(new THREE.Vector3(0, 0.6, 0)), camera, POWERUP_DEFS[p.userData.type].label, 'heal');
             showToast(POWERUP_DEFS[p.userData.type].label, 1500);
+            bumpQuest('powerup');   // objective progress
             scene.remove(p);
             p.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
             powerups.splice(i, 1);
