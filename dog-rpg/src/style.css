@@ -202,6 +202,23 @@ canvas { touch-action: none; }
   will-change: transform, left, top;
 }
 
+/* floating combat text (§25 juice): damage numbers + score pops that rise and fade */
+#combat-text { position: fixed; inset: 0; pointer-events: none; z-index: 14; overflow: hidden; }
+.ctext {
+  position: absolute;
+  font-family: 'Baloo 2', 'Nunito', -apple-system, sans-serif;
+  font-weight: 800;
+  font-size: clamp(19px, 3.2vw, 30px);
+  line-height: 1;
+  white-space: nowrap;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.55), 0 0 8px rgba(0,0,0,0.45);
+  will-change: transform, opacity;
+}
+.ctext-crit  { color: #ffe14d; font-size: clamp(24px, 4vw, 38px); }
+.ctext-score { color: #ffd23f; }
+.ctext-heal  { color: #6ff08a; }
+
 /* =====================================================================
    START SCREEN - "Maple Street title card"
    A storybook title card of the game world: afternoon sky over a warm

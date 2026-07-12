@@ -13,6 +13,8 @@ import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import { initVFX, updateVFX, burst } from './vfx.js';
 import { jawSnap } from './vfx.js';
 
+import { initJuice, popText } from './juice.js';
+
 import { initBullets, updateBullets, resetBullets } from './Bullets.js';
 
 import { showToast } from './ui.js';
@@ -61,6 +63,9 @@ outline.enabled = !(matchMedia('(pointer: coarse)').matches || navigator.maxTouc
 // camera juice: trauma-based screen shake (decays each frame)
 let trauma = 0;
 function addTrauma(amount) { trauma = Math.min(1, trauma + amount); }
+let fovPunch = 0;                          // transient FOV widen on a bite (eases back to 0)
+let hitStopT = 0;                          // brief slow-mo "chunk" on impactful hits
+function hitStop(sec) { hitStopT = Math.max(hitStopT, sec); }
 let elapsed = 0;
 let graceTimer = 0;   // startup grace: dogs stay passive for a few seconds so you don't die on spawn
 const BITE_COOLDOWN = 1.0;   // seconds between bites (shown as a radial timer on the mobile BITE button)
@@ -72,6 +77,7 @@ try { best = Math.max(0, +(localStorage.getItem('gbs_best') || 0)) || 0; } catch
 const GOAL_SCORE = 1500;
 let bossActive = false, won = false;
 initVFX(scene);
+initJuice();
 initBullets(scene);   // persistent pooled projectiles for gun dogs (survives scene swaps)
 
 // sniff = sound + a little scent puff (ties the new VFX to the interaction)
@@ -360,6 +366,8 @@ function attack() {
     biteCd = BITE_COOLDOWN;
     touch.biteCooldown(BITE_COOLDOWN);            // start the radial timer on the mobile BITE button
 
+    fovPunch = 5;                                 // quick FOV whip for bite snap
+
     player.group.position.add(new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.group.rotation.y)); // lunge forward
 
     // jaw-clamp VFX: a toothy chomp snaps shut just ahead of the dog's snout on every bite
@@ -376,14 +384,23 @@ function attack() {
 
             if(distXZ(player.group.position, e.mesh.position) < 4 * player.size) {
 
-                const dead = e.takeHit(15 * player.size);
+                const dmg = 15 * player.size;
+                const dead = e.takeHit(dmg);
 
                 AudioSys.bark();
 
                 addTrauma(0.3);
 
+                // floating damage number above the bitten dog
+                const dmgPos = e.mesh.position.clone(); dmgPos.y += 2.6;
+                popText(dmgPos, camera, String(Math.round(dmg)), player.size >= 2 ? 'crit' : 'dmg');
+
                 if (dead) {
-                    addScore(Math.round(12 + e.scaleVal * 18 + (e.isGun ? 30 : 0) + (e.isFly ? 24 : 0) + (e.isBoss ? 1000 : 0)));
+                    const pts = Math.round(12 + e.scaleVal * 18 + (e.isGun ? 30 : 0) + (e.isFly ? 24 : 0) + (e.isBoss ? 1000 : 0));
+                    addScore(pts);
+                    const scorePos = e.mesh.position.clone(); scorePos.y += 3.4;
+                    popText(scorePos, camera, '+' + pts, 'score');
+                    hitStop(e.isBoss ? 0.13 : 0.07);   // punchy freeze on a kill
                     if (e.isBoss) win();
                     addTrauma(0.45);
                     player.increaseSpeed(5);
@@ -599,7 +616,9 @@ function animate() {
 
     requestAnimationFrame(animate);
 
-    const dt = Math.min(clock.getDelta(), 0.1);   // clamp: a startup/tab-stall spike must not teleport physics or burn the grace
+    const realDt = Math.min(clock.getDelta(), 0.1);   // clamp: a startup/tab-stall spike must not teleport physics or burn the grace
+    let dt = realDt;
+    if (hitStopT > 0) { hitStopT -= realDt; dt = realDt * 0.06; }   // hit-stop: brief slow-mo on impactful hits
 
     elapsed += dt;
 
@@ -667,6 +686,8 @@ function animate() {
 
             if (t.userData.type !== 'essence') addScore(8);   // treats add a little score (kills already scored)
 
+            popText(t.position.clone().add(new THREE.Vector3(0, 1.4, 0)), camera, t.userData.type === 'essence' ? '+size' : '+8', t.userData.type === 'essence' ? 'heal' : 'score');
+
             burst(t.position.clone(), t.userData.type === 'essence' ? 0x39d353 : 0xffd23f, 16, 5.5);
 
             scene.remove(t);
@@ -687,6 +708,7 @@ function animate() {
         if (player.group.position.distanceTo(p.position) < 2.4 * player.size) {
             player.applyPowerup(p.userData.type);
             burst(p.position.clone(), POWERUP_DEFS[p.userData.type].color, 20, 6.5);
+            popText(p.position.clone().add(new THREE.Vector3(0, 0.6, 0)), camera, POWERUP_DEFS[p.userData.type].label, 'heal');
             showToast(POWERUP_DEFS[p.userData.type].label, 1500);
             scene.remove(p);
             p.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
@@ -770,9 +792,11 @@ function animate() {
 
         camera.lookAt(player.group.position.clone().add(new THREE.Vector3(0,2,0)));
 
-        // subtle FOV kick while sprinting for a sense of speed
+        // subtle FOV kick while sprinting for a sense of speed, plus a transient bite whip
 
-        const targetFov = keys.shift ? 66 : 60;
+        const targetFov = (keys.shift ? 66 : 60) + fovPunch;
+
+        fovPunch += (0 - fovPunch) * (1 - Math.exp(-11 * dt));   // ease the bite punch back to 0
 
         camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-6 * dt));
 

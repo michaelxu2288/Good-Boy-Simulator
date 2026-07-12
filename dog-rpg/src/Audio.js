@@ -190,6 +190,16 @@ export const AudioSys = {
         osc.connect(g); g.connect(dest); osc.start(t); osc.stop(t + 0.17);
     },
 
+    // land: soft low thump when paws hit the ground after a jump/fall
+    landSfx: function(vol = 0.12) {
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime, dest = this.master || this.ctx.destination;
+        const osc = this.ctx.createOscillator(); osc.type = 'sine';
+        osc.frequency.setValueAtTime(160, t); osc.frequency.exponentialRampToValueAtTime(60, t + 0.1);
+        const g = this.ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+        osc.connect(g); g.connect(dest); osc.start(t); osc.stop(t + 0.13);
+    },
+
     // low-HP heartbeat (lub-dub)
     heartbeat: function() {
         if (!this.ctx) return;

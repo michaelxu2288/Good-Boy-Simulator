@@ -35,6 +35,7 @@ export class Player {
         this.group.add(this.tilt);
         this.bobAmt = 0; this.bank = 0;
         this.vy = 0; this.grounded = true;   // jump physics (flat ground)
+        this.squashT = 999; this.squashAmt = 0;   // squash-and-stretch impulse (damped spring on the tilt pivot)
 
         // Stats
         this.hp = 100;
@@ -69,7 +70,11 @@ export class Player {
 
     // normal-physics jump (only off the ground); gravity in update() brings it back down
     jump() {
-        if (this.grounded) { this.vy = 14; this.grounded = false; AudioSys.jumpSfx(); }
+        if (this.grounded) {
+            this.vy = 14; this.grounded = false;
+            this.squashT = 0; this.squashAmt = -0.16;   // stretch tall on launch
+            AudioSys.jumpSfx();
+        }
     }
 
     grow(amount) {
@@ -142,8 +147,16 @@ export class Player {
         const groundLevel = getTerrainHeightAt(this.group.position.x, this.group.position.z);
         this.vy -= 34 * dt;                                   // gravity
         let ny = this.group.position.y + this.vy * dt;
-        if (ny <= groundLevel) { ny = groundLevel; this.vy = 0; this.grounded = true; }
-        else { this.grounded = false; }
+        const wasAir = !this.grounded;
+        if (ny <= groundLevel) {
+            const impact = this.vy;                           // negative falling velocity at touchdown
+            ny = groundLevel; this.vy = 0;
+            if (wasAir && impact < -5) {                      // squash on landing, scaled by impact speed
+                this.squashT = 0; this.squashAmt = Math.min(0.42, -impact * 0.02);
+                AudioSys.landSfx(Math.min(0.18, -impact * 0.008));
+            }
+            this.grounded = true;
+        } else { this.grounded = false; }
         this.group.position.y = ny;
 
         // gait + bank, eased, on the tilt pivot (never on group -> camera unaffected)
@@ -156,6 +169,11 @@ export class Player {
             this.tilt.position.y = gait * 0.26 * this.size * this.bobAmt;
             this.tilt.rotation.x = Math.sin(this.walkTimer) * 0.14 * this.bobAmt;              // rock nose down on the push
             this.tilt.rotation.z = this.bank + Math.sin(this.walkTimer * 0.5) * 0.08 * this.bobAmt;  // waddle
+
+            // squash-and-stretch: a damped oscillation off the jump/land impulse (settles to 1)
+            this.squashT += dt;
+            const s = this.squashT < 0.6 ? this.squashAmt * Math.cos(this.squashT * 26) * Math.exp(-this.squashT * 7) : 0;
+            this.tilt.scale.set(1 + s * 0.5, 1 - s, 1 + s * 0.5);
         }
     }
 }
